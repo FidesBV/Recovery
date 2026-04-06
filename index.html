@@ -399,6 +399,106 @@ input[type=range]::-moz-range-thumb {
 /* DIVIDER */
 .divider { height: 1px; background: var(--border); margin: 0 16px; }
 
+/* ── HEALTH SCREEN ── */
+.upload-zone {
+  margin: 0 16px 16px;
+  border: 1px dashed var(--border2);
+  border-radius: 16px;
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg2);
+  position: relative;
+}
+.upload-zone:active { border-color: var(--text2); background: var(--bg3); }
+.upload-zone input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.upload-icon { font-size: 28px; margin-bottom: 10px; }
+.upload-title { font-size: 13px; color: var(--text); margin-bottom: 4px; }
+.upload-sub { font-size: 10px; color: var(--text3); line-height: 1.5; }
+.upload-badge {
+  display: inline-block; margin-top: 10px; font-size: 9px;
+  padding: 3px 10px; border-radius: 6px;
+  background: var(--g-dim); color: var(--green);
+  letter-spacing: 0.08em;
+}
+
+.score-ring-card {
+  margin: 0 16px 12px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 16px; padding: 16px;
+  display: flex; align-items: center; gap: 20px;
+}
+.score-ring-wrap { position: relative; width: 90px; height: 90px; flex-shrink: 0; }
+.score-ring-wrap svg { transform: rotate(-90deg); }
+.score-ring-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.score-ring-val { font-size: 28px; font-weight: 300; color: var(--text); line-height: 1; }
+.score-ring-lbl { font-size: 8px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; }
+.score-ring-info { flex: 1; }
+.score-ring-status { font-size: 13px; color: var(--text); margin-bottom: 4px; }
+.score-ring-date { font-size: 9px; color: var(--text3); letter-spacing: 0.08em; margin-bottom: 10px; }
+.score-component-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 0;
+}
+.score-comp-label { font-size: 10px; color: var(--text3); }
+.score-comp-bar-wrap { flex: 1; height: 3px; background: var(--border); border-radius: 2px; margin: 0 8px; }
+.score-comp-bar { height: 3px; border-radius: 2px; background: var(--text); }
+.score-comp-val { font-size: 10px; color: var(--text2); min-width: 28px; text-align: right; }
+
+.health-metric-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px; margin: 0 16px 12px;
+}
+.health-metric-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px;
+}
+.hm-label { font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+.hm-val { font-size: 24px; font-weight: 300; color: var(--text); line-height: 1; margin-bottom: 2px; }
+.hm-unit { font-size: 10px; color: var(--text3); }
+.hm-trend { font-size: 10px; margin-top: 6px; }
+.hm-chart { margin-top: 8px; height: 40px; position: relative; }
+.hm-chart canvas { width: 100% !important; height: 40px !important; }
+
+.health-chart-card {
+  margin: 0 16px 12px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px;
+}
+.hc-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+.hc-title { font-size: 11px; color: var(--text); }
+.hc-sub { font-size: 9px; color: var(--text3); }
+.hc-chart { height: 100px; position: relative; }
+.hc-chart canvas { width: 100% !important; height: 100px !important; }
+
+.signal-row {
+  margin: 0 16px 8px;
+  border-radius: 12px; padding: 12px 14px;
+  border-left: 3px solid;
+}
+.signal-row.ok { background: var(--g-dim); border-color: var(--green); }
+.signal-row.warn { background: var(--y-dim); border-color: var(--yellow); }
+.signal-row.alert { background: var(--r-dim); border-color: var(--red); }
+.signal-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 3px; }
+.signal-row.ok .signal-title { color: var(--green); }
+.signal-row.warn .signal-title { color: var(--yellow); }
+.signal-row.alert .signal-title { color: var(--red); }
+.signal-body { font-size: 11px; color: var(--text2); line-height: 1.5; }
+
+.sleep-bar-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.sleep-bar-date { font-size: 9px; color: var(--text3); min-width: 32px; }
+.sleep-bar-track { flex: 1; height: 14px; background: var(--bg3); border-radius: 2px; overflow: hidden; display: flex; }
+.sleep-seg-deep { background: rgba(255,255,255,0.9); height: 100%; }
+.sleep-seg-rem { background: rgba(255,255,255,0.35); height: 100%; }
+.sleep-seg-core { background: rgba(255,255,255,0.12); height: 100%; }
+.sleep-bar-val { font-size: 9px; color: var(--text2); min-width: 30px; text-align: right; }
+
 /* ── PROGRESS STYLES ── */
 .overview-grid {
   display: grid; grid-template-columns: 1fr 1fr 1fr;
@@ -711,6 +811,157 @@ input[type=range]::-moz-range-thumb {
 
   </div>
 
+  <!-- ═══ SCREEN: HEALTH ═══ -->
+  <div class="screen" id="screen-health">
+
+    <div class="page-header">
+      <div class="page-date" id="health-date">—</div>
+      <div class="page-title">Health<br><em>dashboard</em></div>
+    </div>
+
+    <!-- UPLOAD ZONE -->
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" accept=".json" onchange="onJsonUpload(event)">
+      <div class="upload-icon" id="upload-icon">⬆</div>
+      <div class="upload-title" id="upload-title">Upload Apple Health JSON</div>
+      <div class="upload-sub" id="upload-sub">HealthAutoExport → export JSON<br>then tap here to upload</div>
+      <div class="upload-badge" id="upload-badge" style="display:none">—</div>
+    </div>
+
+    <!-- CONTENT (hidden until data loaded) -->
+    <div id="health-content" style="display:none">
+
+      <!-- RECOVERY SCORE -->
+      <div class="section-label">Weekly recovery score</div>
+      <div class="score-ring-card">
+        <div class="score-ring-wrap">
+          <svg width="90" height="90" viewBox="0 0 90 90">
+            <circle cx="45" cy="45" r="38" fill="none" stroke="#1a1a1a" stroke-width="7"/>
+            <circle cx="45" cy="45" r="38" fill="none" stroke="#e8e8e8" stroke-width="7"
+              id="score-ring-arc" stroke-dasharray="238.8" stroke-dashoffset="238.8"
+              stroke-linecap="round" style="transition:stroke-dashoffset 1s ease,stroke 0.5s"/>
+          </svg>
+          <div class="score-ring-center">
+            <div class="score-ring-val" id="score-val">—</div>
+            <div class="score-ring-lbl">/ 100</div>
+          </div>
+        </div>
+        <div class="score-ring-info">
+          <div class="score-ring-status" id="score-status">—</div>
+          <div class="score-ring-date" id="score-date">—</div>
+          <div id="score-components"></div>
+        </div>
+      </div>
+
+      <!-- SIGNALS -->
+      <div class="section-label">Signals</div>
+      <div id="health-signals"></div>
+
+      <!-- KEY METRICS GRID -->
+      <div class="section-label">Key metrics — 7 day average</div>
+      <div class="health-metric-grid">
+        <div class="health-metric-card">
+          <div class="hm-label">HRV</div>
+          <div><span class="hm-val" id="hm-hrv">—</span><span class="hm-unit"> ms</span></div>
+          <div class="hm-trend" id="hm-hrv-trend">—</div>
+          <div class="hm-chart"><canvas id="mini-hrv"></canvas></div>
+        </div>
+        <div class="health-metric-card">
+          <div class="hm-label">Resting HR</div>
+          <div><span class="hm-val" id="hm-rhr">—</span><span class="hm-unit"> bpm</span></div>
+          <div class="hm-trend" id="hm-rhr-trend">—</div>
+          <div class="hm-chart"><canvas id="mini-rhr"></canvas></div>
+        </div>
+        <div class="health-metric-card">
+          <div class="hm-label">Deep sleep</div>
+          <div><span class="hm-val" id="hm-deep">—</span><span class="hm-unit"> h</span></div>
+          <div class="hm-trend" id="hm-deep-trend">—</div>
+          <div class="hm-chart"><canvas id="mini-deep"></canvas></div>
+        </div>
+        <div class="health-metric-card">
+          <div class="hm-label">VO₂max</div>
+          <div><span class="hm-val" id="hm-vo2">—</span><span class="hm-unit"> ml/kg</span></div>
+          <div class="hm-trend" id="hm-vo2-trend">—</div>
+          <div class="hm-chart"><canvas id="mini-vo2"></canvas></div>
+        </div>
+      </div>
+
+      <!-- HRV CHART -->
+      <div class="section-label">HRV — 28 days</div>
+      <div class="health-chart-card">
+        <div class="hc-header">
+          <div class="hc-title">Heart Rate Variability</div>
+          <div class="hc-sub">nightly average · ms</div>
+        </div>
+        <div class="hc-chart"><canvas id="chart-hrv-full"></canvas></div>
+        <div style="display:flex;gap:16px;margin-top:8px;font-size:9px;color:var(--text3);">
+          <span>— 32 ms threshold</span>
+          <span>— 40 ms optimal</span>
+        </div>
+      </div>
+
+      <!-- RHR CHART -->
+      <div class="health-chart-card">
+        <div class="hc-header">
+          <div class="hc-title">Resting Heart Rate</div>
+          <div class="hc-sub">bpm · lower = better</div>
+        </div>
+        <div class="hc-chart"><canvas id="chart-rhr-full"></canvas></div>
+      </div>
+
+      <!-- SLEEP CHART -->
+      <div class="section-label">Sleep — last 7 nights</div>
+      <div class="health-chart-card">
+        <div class="hc-header">
+          <div class="hc-title">Sleep stages</div>
+          <div class="hc-sub">deep · rem · core</div>
+        </div>
+        <div id="sleep-bars"></div>
+        <div style="display:flex;gap:12px;margin-top:10px;font-size:9px;color:var(--text3);">
+          <span><span style="color:rgba(255,255,255,0.9)">■</span> Deep</span>
+          <span><span style="color:rgba(255,255,255,0.4)">■</span> REM</span>
+          <span><span style="color:rgba(255,255,255,0.15)">■</span> Core</span>
+          <span style="margin-left:auto">Goal: ≥1.5h deep</span>
+        </div>
+      </div>
+
+      <!-- BREATHING -->
+      <div class="section-label">Breathing & oxygen</div>
+      <div class="health-metric-grid">
+        <div class="health-metric-card">
+          <div class="hm-label">Resp rate</div>
+          <div><span class="hm-val" id="hm-resp">—</span><span class="hm-unit">/min</span></div>
+          <div class="hm-trend" id="hm-resp-trend">—</div>
+          <div class="hm-chart"><canvas id="mini-resp"></canvas></div>
+        </div>
+        <div class="health-metric-card">
+          <div class="hm-label">SpO₂</div>
+          <div><span class="hm-val" id="hm-spo2">—</span><span class="hm-unit">%</span></div>
+          <div class="hm-trend" id="hm-spo2-trend">—</div>
+          <div class="hm-chart"><canvas id="mini-spo2"></canvas></div>
+        </div>
+        <div class="health-metric-card">
+          <div class="hm-label">Sleep disturb.</div>
+          <div><span class="hm-val" id="hm-bd">—</span><span class="hm-unit">/h</span></div>
+          <div class="hm-trend" id="hm-bd-trend">—</div>
+          <div class="hm-chart"><canvas id="mini-bd"></canvas></div>
+        </div>
+        <div class="health-metric-card">
+          <div class="hm-label">Cardio rec.</div>
+          <div><span class="hm-val" id="hm-cr">—</span><span class="hm-unit"> bpm</span></div>
+          <div class="hm-trend" id="hm-cr-trend">—</div>
+          <div class="hm-chart"><canvas id="mini-cr"></canvas></div>
+        </div>
+      </div>
+
+    </div><!-- /health-content -->
+
+    <div style="padding:20px;text-align:center;font-size:9px;color:var(--text3);letter-spacing:0.1em;">
+      Upload weekly for best results<br>HealthAutoExport → JSON export
+    </div>
+
+  </div>
+
   <!-- ═══ SCREEN: SETTINGS ═══ -->
   <div class="screen" id="screen-settings">
 
@@ -776,7 +1027,7 @@ input[type=range]::-moz-range-thumb {
     </div>
 
     <div style="padding:20px;text-align:center;font-size:9px;color:var(--text3);letter-spacing:0.1em;">
-      RECOVERY APP · PHASE 2 · BUILD 1.2<br>
+      RECOVERY APP · PHASE 3 · BUILD 1.3<br>
       Data stored locally on this device
     </div>
 
@@ -795,6 +1046,10 @@ input[type=range]::-moz-range-thumb {
     <button class="nav-btn" onclick="showScreen('progress', this)">
       <span class="nav-icon">↗</span>
       <span class="nav-label">Progress</span>
+    </button>
+    <button class="nav-btn" onclick="showScreen('health', this)">
+      <span class="nav-icon">♡</span>
+      <span class="nav-label">Health</span>
     </button>
     <button class="nav-btn" onclick="showScreen('settings', this)">
       <span class="nav-icon">◈</span>
@@ -1747,6 +2002,7 @@ function showScreen(id, btn) {
   btn.classList.add('active');
 
   if (id === 'progress') buildProgressScreen();
+  if (id === 'health') buildHealthDashboard();
   if (id === 'log') buildLogScreen();
   if (id === 'settings') {
     document.getElementById('toggle-timer').classList.toggle('on', settings.timerOn);
@@ -1764,6 +2020,439 @@ function toast(msg) {
   el.classList.add('show');
   clearTimeout(toastTimeout);
   toastTimeout = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// ═══════════════════════════════════════════
+// HEALTH DASHBOARD
+// ═══════════════════════════════════════════
+
+function onJsonUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  toast('Reading file...');
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const raw = JSON.parse(e.target.result);
+      const metrics = {};
+      (raw.data?.metrics || []).forEach(m => { metrics[m.name] = m.data; });
+      DB.set('health_metrics', metrics);
+      DB.set('health_uploaded', file.name + ' · ' + new Date().toLocaleDateString('en-GB'));
+      toast('Health data imported ✓');
+      buildHealthDashboard();
+    } catch(err) {
+      toast('Could not read file — check format');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function getMetricByDate(metrics, name, days = 28) {
+  const result = {};
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  (metrics[name] || []).forEach(r => {
+    const d = (r.date || '').slice(0, 10);
+    if (d && new Date(d) >= cutoff) result[d] = r.qty || 0;
+  });
+  return result;
+}
+
+function avg(vals) {
+  const v = vals.filter(x => x > 0);
+  return v.length ? v.reduce((a,b) => a+b, 0) / v.length : 0;
+}
+
+function last7(obj) {
+  return Object.entries(obj).sort((a,b) => a[0].localeCompare(b[0])).slice(-7).map(e => e[1]);
+}
+
+function last28arr(obj) {
+  return Object.entries(obj).sort((a,b) => a[0].localeCompare(b[0])).slice(-28);
+}
+
+function trendArrow(vals) {
+  if (vals.length < 4) return { text: '—', color: 'var(--text3)' };
+  const first = avg(vals.slice(0, Math.floor(vals.length/2)));
+  const second = avg(vals.slice(Math.floor(vals.length/2)));
+  const diff = second - first;
+  if (Math.abs(diff) < 0.5) return { text: '→ Stable', color: 'var(--text2)' };
+  return diff > 0
+    ? { text: `↑ +${Math.abs(diff).toFixed(1)}`, color: 'var(--green)' }
+    : { text: `↓ −${Math.abs(diff).toFixed(1)}`, color: 'var(--red)' };
+}
+
+function calcRecoveryScore(hrv7, rhr7, deep7, resp7, bd7, steps7, cr7) {
+  // HRV 35% — zone 32-39 = baseline
+  const hrvAvg = avg(hrv7);
+  let hrvScore = 0;
+  if (hrvAvg >= 40) hrvScore = 35;
+  else if (hrvAvg >= 32) hrvScore = 35 * ((hrvAvg - 25) / 15);
+  else if (hrvAvg >= 25) hrvScore = 35 * ((hrvAvg - 25) / 15) * 0.7;
+  else hrvScore = 0;
+
+  // RHR 20% — <60 = full, >65 = 0
+  const rhrAvg = avg(rhr7);
+  const rhrScore = rhrAvg <= 0 ? 10 : Math.max(0, Math.min(20, 20 * (1 - (rhrAvg - 55) / 15)));
+
+  // Cardio recovery 10% — ≥33 = full
+  const crAvg = avg(cr7);
+  const crScore = crAvg <= 0 ? 5 : Math.min(10, 10 * (crAvg / 33));
+
+  // Sleep 25% — total + deep + consistency
+  const deepAvg = avg(deep7);
+  const deepScore = Math.min(15, 15 * (deepAvg / 1.5));
+  const totalSleepOk = deep7.filter(v => v > 0).length >= 5 ? 10 : 5;
+  const sleepScore = deepScore + totalSleepOk;
+
+  // Breathing 5%
+  const respAvg = avg(resp7);
+  const bdAvg = avg(bd7);
+  const respScore = respAvg <= 0 ? 2.5 :
+    respAvg < 14 ? 5 : respAvg < 15 ? 3 : 1;
+
+  // Activity 5%
+  const stepsAvg = avg(steps7);
+  const actScore = Math.min(5, 5 * (stepsAvg / 8000));
+
+  const total = Math.round(hrvScore + rhrScore + crScore + sleepScore + respScore + actScore);
+
+  return {
+    total: Math.min(100, Math.max(0, total)),
+    components: {
+      hrv: Math.round(hrvScore),
+      rhr: Math.round(rhrScore),
+      cr: Math.round(crScore),
+      sleep: Math.round(sleepScore),
+      breathing: Math.round(respScore),
+      activity: Math.round(actScore)
+    }
+  };
+}
+
+function buildHealthDashboard() {
+  const metrics = DB.get('health_metrics');
+  const uploaded = DB.get('health_uploaded');
+
+  // Update upload zone
+  const icon = document.getElementById('upload-icon');
+  const title = document.getElementById('upload-title');
+  const sub = document.getElementById('upload-sub');
+  const badge = document.getElementById('upload-badge');
+
+  if (uploaded) {
+    icon.textContent = '✓';
+    title.textContent = 'Data loaded';
+    sub.textContent = 'Tap to upload newer export';
+    badge.style.display = 'inline-block';
+    badge.textContent = uploaded;
+  }
+
+  document.getElementById('health-date').textContent =
+    new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  if (!metrics) return;
+  document.getElementById('health-content').style.display = 'block';
+
+  // ── EXTRACT DATA ──
+  const hrv28obj  = getMetricByDate(metrics, 'heart_rate_variability', 28);
+  const rhr28obj  = getMetricByDate(metrics, 'resting_heart_rate', 28);
+  const resp28obj = getMetricByDate(metrics, 'respiratory_rate', 28);
+  const bd28obj   = getMetricByDate(metrics, 'breathing_disturbances', 28);
+  const spo228obj = getMetricByDate(metrics, 'blood_oxygen_saturation', 28);
+  const vo228obj  = getMetricByDate(metrics, 'vo2_max', 28);
+  const cr28obj   = getMetricByDate(metrics, 'cardio_recovery', 28);
+  const steps28obj= getMetricByDate(metrics, 'step_count', 28);
+
+  // Sleep
+  const sleep7 = [];
+  const sleepCutoff = new Date(); sleepCutoff.setDate(sleepCutoff.getDate() - 7);
+  (metrics['sleep_analysis'] || []).forEach(r => {
+    if (new Date((r.date||'').slice(0,10)) >= sleepCutoff) sleep7.push(r);
+  });
+  sleep7.sort((a,b) => a.date.localeCompare(b.date));
+
+  const hrv7vals  = last7(hrv28obj);
+  const rhr7vals  = last7(rhr28obj);
+  const deep7vals = sleep7.slice(-7).map(s => s.deep || 0);
+  const resp7vals = last7(resp28obj);
+  const bd7vals   = last7(bd28obj);
+  const steps7vals= last7(steps28obj);
+  const cr7vals   = last7(cr28obj);
+  const spo27vals = last7(spo228obj);
+  const vo27vals  = last7(vo228obj);
+
+  // ── RECOVERY SCORE ──
+  const score = calcRecoveryScore(hrv7vals, rhr7vals, deep7vals, resp7vals, bd7vals, steps7vals, cr7vals);
+  const scoreColor = score.total >= 80 ? '#4ade80' : score.total >= 60 ? '#fbbf24' : '#f87171';
+  const scoreStatus = score.total >= 80 ? 'Good recovery' : score.total >= 60 ? 'Stable' : score.total >= 40 ? 'Fatigued' : 'Poor recovery';
+
+  document.getElementById('score-val').textContent = score.total;
+  document.getElementById('score-status').textContent = scoreStatus;
+  document.getElementById('score-date').textContent = 'Based on last 7 days';
+
+  // Arc
+  const arc = document.getElementById('score-ring-arc');
+  const circ = 238.8;
+  arc.style.strokeDashoffset = circ - (circ * score.total / 100);
+  arc.style.stroke = scoreColor;
+
+  // Components
+  const comps = [
+    { label: 'HRV (35%)', pts: score.components.hrv, max: 35 },
+    { label: 'Rest HR (20%)', pts: score.components.rhr, max: 20 },
+    { label: 'Cardio rec (10%)', pts: score.components.cr, max: 10 },
+    { label: 'Sleep (25%)', pts: score.components.sleep, max: 25 },
+    { label: 'Breathing (5%)', pts: score.components.breathing, max: 5 },
+    { label: 'Activity (5%)', pts: score.components.activity, max: 5 },
+  ];
+  document.getElementById('score-components').innerHTML = comps.map(c => `
+    <div class="score-component-row">
+      <div class="score-comp-label">${c.label}</div>
+      <div class="score-comp-bar-wrap"><div class="score-comp-bar" style="width:${Math.round(c.pts/c.max*100)}%;background:${scoreColor}"></div></div>
+      <div class="score-comp-val">${c.pts}</div>
+    </div>`).join('');
+
+  // ── SIGNALS ──
+  buildSignals(hrv7vals, rhr7vals, deep7vals, bd7vals, vo27vals, resp7vals);
+
+  // ── KEY METRICS ──
+  const hrvAvg7 = avg(hrv7vals);
+  const rhrAvg7 = avg(rhr7vals);
+  const deepAvg7 = avg(deep7vals);
+  const vo2Last = vo27vals.filter(v=>v>0).pop() || 0;
+
+  document.getElementById('hm-hrv').textContent = hrvAvg7.toFixed(1);
+  document.getElementById('hm-rhr').textContent = rhrAvg7.toFixed(0);
+  document.getElementById('hm-deep').textContent = deepAvg7.toFixed(2);
+  document.getElementById('hm-vo2').textContent = vo2Last.toFixed(1);
+
+  const hrv28vals = last28arr(hrv28obj).map(e=>e[1]);
+  const rhr28vals = last28arr(rhr28obj).map(e=>e[1]);
+  const vo228vals = last28arr(vo228obj).map(e=>e[1]);
+
+  const hrvTrend = trendArrow(hrv28vals);
+  const rhrTrend = trendArrow(rhr28vals.map(v => -v)); // lower is better
+  const deepTrend = trendArrow(deep7vals);
+  const vo2Trend = trendArrow(vo228vals);
+
+  document.getElementById('hm-hrv-trend').innerHTML = `<span style="color:${hrvTrend.color}">${hrvTrend.text}</span>`;
+  document.getElementById('hm-rhr-trend').innerHTML = `<span style="color:${rhrTrend.color}">${rhrTrend.text}</span>`;
+  document.getElementById('hm-deep-trend').innerHTML = `<span style="color:${deepTrend.color}">${deepTrend.text}</span>`;
+  document.getElementById('hm-vo2-trend').innerHTML = `<span style="color:${vo2Trend.color}">${vo2Trend.text}</span>`;
+
+  // Breathing metrics
+  const respAvg7 = avg(resp7vals);
+  const spo2Avg7 = avg(spo27vals);
+  const bdAvg7 = avg(bd7vals);
+  const crAvg7 = avg(cr7vals);
+
+  document.getElementById('hm-resp').textContent = respAvg7.toFixed(1);
+  document.getElementById('hm-spo2').textContent = spo2Avg7.toFixed(1);
+  document.getElementById('hm-bd').textContent = bdAvg7.toFixed(2);
+  document.getElementById('hm-cr').textContent = crAvg7.toFixed(1);
+
+  const respColor = respAvg7 < 14 ? 'var(--green)' : respAvg7 < 15 ? 'var(--yellow)' : 'var(--red)';
+  const spo2Color = spo2Avg7 >= 95 ? 'var(--green)' : 'var(--red)';
+  const bdColor = bdAvg7 < 2 ? 'var(--green)' : bdAvg7 < 3 ? 'var(--yellow)' : 'var(--red)';
+  const crColor = crAvg7 >= 33 ? 'var(--green)' : crAvg7 >= 28 ? 'var(--yellow)' : 'var(--red)';
+
+  document.getElementById('hm-resp-trend').innerHTML = `<span style="color:${respColor}">${respAvg7 < 15 ? 'Normal' : '⚠ High'}</span>`;
+  document.getElementById('hm-spo2-trend').innerHTML = `<span style="color:${spo2Color}">${spo2Avg7 >= 95 ? 'Normal' : '⚠ Low'}</span>`;
+  document.getElementById('hm-bd-trend').innerHTML = `<span style="color:${bdColor}">${bdAvg7 < 3 ? 'OK' : '⚠ High'}</span>`;
+  document.getElementById('hm-cr-trend').innerHTML = `<span style="color:${crColor}">${crAvg7 >= 33 ? '≥33 Good' : '< 33 Low'}</span>`;
+
+  // ── MINI CHARTS ──
+  requestAnimationFrame(() => {
+    drawMiniChart('mini-hrv', hrv7vals, '#e8e8e8');
+    drawMiniChart('mini-rhr', rhr7vals, '#60a5fa');
+    drawMiniChart('mini-deep', deep7vals, '#a78bfa');
+    drawMiniChart('mini-vo2', vo27vals, '#34d399');
+    drawMiniChart('mini-resp', resp7vals, '#93c5fd');
+    drawMiniChart('mini-spo2', spo27vals, '#6ee7b7');
+    drawMiniChart('mini-bd', bd7vals, '#fbbf24');
+    drawMiniChart('mini-cr', cr7vals, '#f9a8d4');
+
+    drawFullChart('chart-hrv-full', last28arr(hrv28obj), '#e8e8e8', [32, 40]);
+    drawFullChart('chart-rhr-full', last28arr(rhr28obj), '#60a5fa', [65]);
+
+    buildSleepBars(sleep7.slice(-7));
+  });
+}
+
+function buildSignals(hrv7, rhr7, deep7, bd7, vo2, resp7) {
+  const container = document.getElementById('health-signals');
+  container.innerHTML = '';
+  const signals = [];
+
+  const hrvAvg = avg(hrv7);
+  const rhrAvg = avg(rhr7);
+  const deepAvg = avg(deep7);
+  const bdAvg = avg(bd7);
+  const vo2Last = vo2.filter(v=>v>0).pop() || 0;
+  const respAvg = avg(resp7);
+
+  // HRV
+  if (hrvAvg >= 38) signals.push({ type:'ok', title:'HRV — Good zone', body:`7-day average ${hrvAvg.toFixed(1)} ms. Autonomic recovery is progressing well.` });
+  else if (hrvAvg >= 30) signals.push({ type:'warn', title:'HRV — Below optimal', body:`7-day average ${hrvAvg.toFixed(1)} ms. Target zone 32–39 ms. Monitor for further decline.` });
+  else signals.push({ type:'alert', title:'HRV — Low', body:`7-day average ${hrvAvg.toFixed(1)} ms. Reduce training load and prioritise sleep and breathing.` });
+
+  // RHR
+  if (rhrAvg > 0 && rhrAvg <= 62) signals.push({ type:'ok', title:'Resting HR — Good', body:`Average ${rhrAvg.toFixed(0)} bpm. Trending in right direction.` });
+  else if (rhrAvg > 65) signals.push({ type:'warn', title:'Resting HR — Elevated', body:`Average ${rhrAvg.toFixed(0)} bpm (threshold: 65). No strength training on days >65 bpm.` });
+
+  // Deep sleep
+  if (deepAvg < 1.0) signals.push({ type:'alert', title:'Deep sleep — Chronically low', body:`Average ${deepAvg.toFixed(2)}h (goal ≥1.5h). Consistent bedtime ≤22:30 is the highest-impact intervention.` });
+  else if (deepAvg < 1.3) signals.push({ type:'warn', title:'Deep sleep — Below target', body:`Average ${deepAvg.toFixed(2)}h (goal ≥1.5h). Pre-bed temperature protocol recommended.` });
+  else signals.push({ type:'ok', title:'Deep sleep — On track', body:`Average ${deepAvg.toFixed(2)}h. Keep consistent bedtime.` });
+
+  // VO2max
+  if (vo2Last > 0 && vo2Last < 36) signals.push({ type:'alert', title:'VO₂max — Below reference', body:`${vo2Last.toFixed(1)} ml/kg/min (reference: 36.0). Gradual aerobic rebuilding recommended.` });
+  else if (vo2Last >= 37) signals.push({ type:'ok', title:'VO₂max — Trending up', body:`${vo2Last.toFixed(1)} ml/kg/min. Aerobic capacity recovering.` });
+
+  // BD
+  if (bdAvg >= 3) signals.push({ type:'alert', title:'Sleep disturbances — High', body:`Average ${bdAvg.toFixed(1)}/h (threshold: 3.0). Avoid intensive training. Extra sleep prep needed.` });
+
+  // Resp
+  if (respAvg >= 15) signals.push({ type:'warn', title:'Respiratory rate — Elevated', body:`Average ${respAvg.toFixed(1)}/min during sleep. Values ≥15 correlate with stress response. Continue breathing protocol.` });
+
+  signals.forEach(s => {
+    container.innerHTML += `<div class="signal-row ${s.type}">
+      <div class="signal-title">${s.title}</div>
+      <div class="signal-body">${s.body}</div>
+    </div>`;
+  });
+}
+
+function drawMiniChart(id, vals, color) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.offsetWidth;
+  const H = 40;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const data = vals.filter(v => v > 0);
+  if (data.length < 2) return;
+  const min = Math.min(...data) * 0.95;
+  const max = Math.max(...data) * 1.05;
+  const range = max - min || 1;
+  const step = W / (data.length - 1);
+  const toY = v => H - 4 - ((v - min) / range) * (H - 8);
+
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    if (i === 0) ctx.moveTo(0, toY(v));
+    else ctx.lineTo(i * step, toY(v));
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Last dot
+  ctx.beginPath();
+  ctx.arc((data.length-1)*step, toY(data[data.length-1]), 3, 0, Math.PI*2);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function drawFullChart(id, entries, color, thresholds = []) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.offsetWidth - 28;
+  const H = 100;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const data = entries.map(e => e[1]).filter(v => v > 0);
+  const labels = entries.filter(e => e[1] > 0).map(e => e[0].slice(5));
+  if (data.length < 2) return;
+
+  const padL = 2, padR = 2, padT = 8, padB = 16;
+  const cW = W - padL - padR;
+  const cH = H - padT - padB;
+  const allVals = [...data, ...thresholds];
+  const min = Math.min(...allVals) - 2;
+  const max = Math.max(...allVals) + 2;
+  const range = max - min || 1;
+  const step = data.length > 1 ? cW / (data.length - 1) : cW;
+  const toX = i => padL + i * step;
+  const toY = v => padT + cH - ((v - min) / range) * cH;
+
+  // Thresholds
+  thresholds.forEach((t, i) => {
+    ctx.beginPath();
+    ctx.moveTo(padL, toY(t)); ctx.lineTo(W - padR, toY(t));
+    ctx.strokeStyle = i === 0 ? 'rgba(251,191,36,0.4)' : 'rgba(74,222,128,0.4)';
+    ctx.lineWidth = 1; ctx.setLineDash([4,4]);
+    ctx.stroke(); ctx.setLineDash([]);
+  });
+
+  // Fill
+  ctx.beginPath();
+  data.forEach((v, i) => i === 0 ? ctx.moveTo(toX(i), toY(v)) : ctx.lineTo(toX(i), toY(v)));
+  ctx.lineTo(toX(data.length-1), padT+cH);
+  ctx.lineTo(toX(0), padT+cH);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.04)';
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  data.forEach((v, i) => i === 0 ? ctx.moveTo(toX(i), toY(v)) : ctx.lineTo(toX(i), toY(v)));
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Dots — only first, last, min, max
+  const pr = Math.max(...data);
+  data.forEach((v, i) => {
+    if (i === 0 || i === data.length-1 || v === pr) {
+      ctx.beginPath();
+      ctx.arc(toX(i), toY(v), 3, 0, Math.PI*2);
+      ctx.fillStyle = v === pr ? '#fbbf24' : color;
+      ctx.fill();
+    }
+  });
+
+  // X labels
+  ctx.fillStyle = '#333'; ctx.font = '8px DM Mono'; ctx.textAlign = 'center';
+  [0, Math.floor(data.length/2), data.length-1].forEach(i => {
+    if (labels[i]) ctx.fillText(labels[i], toX(i), H - 2);
+  });
+}
+
+function buildSleepBars(sleep) {
+  const container = document.getElementById('sleep-bars');
+  if (!container) return;
+  const maxH = 9; // max hours scale
+  container.innerHTML = sleep.map(s => {
+    const d = new Date(s.date).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    const deep = s.deep || 0;
+    const rem = s.rem || 0;
+    const core = s.core || 0;
+    const total = deep + rem + core;
+    const deepW = Math.round((deep/maxH)*100);
+    const remW = Math.round((rem/maxH)*100);
+    const coreW = Math.round((core/maxH)*100);
+    const deepColor = deep >= 1.5 ? 'var(--green)' : deep >= 1.0 ? 'var(--yellow)' : 'var(--red)';
+    return `<div class="sleep-bar-row">
+      <div class="sleep-bar-date">${d}</div>
+      <div class="sleep-bar-track">
+        <div class="sleep-seg-deep" style="width:${deepW}%"></div>
+        <div class="sleep-seg-rem" style="width:${remW}%"></div>
+        <div class="sleep-seg-core" style="width:${coreW}%"></div>
+      </div>
+      <div class="sleep-bar-val" style="color:${deepColor}">${deep.toFixed(2)}h</div>
+    </div>`;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════
@@ -1794,6 +2483,8 @@ function init() {
 
   // Settings
   document.getElementById('toggle-timer').classList.toggle('on', settings.timerOn);
+  // Restore health data if available
+  if (DB.get('health_metrics')) buildHealthDashboard();
 }
 
 document.addEventListener('DOMContentLoaded', init);
