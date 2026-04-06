@@ -243,6 +243,50 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'DM Mono'
 .signal-card.alert .sig-title{color:var(--red);}
 .sig-body{font-size:11px;color:var(--t2);line-height:1.5;}
 
+/* SUMMARY CARD */
+.summary-card{margin:0 16px 10px;background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:14px 16px;}
+.summary-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;}
+.summary-title{font-size:13px;color:var(--t1);}
+.summary-period{font-size:9px;color:var(--t3);letter-spacing:0.08em;margin-top:2px;}
+.summary-badges{display:flex;gap:8px;margin-bottom:12px;}
+.summary-badge{padding:5px 10px;border-radius:8px;font-size:11px;display:flex;align-items:center;gap:5px;}
+.summary-badge.improved{background:var(--gd);color:var(--green);}
+.summary-badge.stable{background:var(--bg3);color:var(--t2);}
+.summary-badge.declined{background:var(--rd);color:var(--red);}
+.summary-rows{}
+.summary-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);}
+.summary-row:last-child{border-bottom:none;}
+.summary-metric{font-size:11px;color:var(--t2);}
+.summary-values{display:flex;align-items:center;gap:6px;font-size:11px;}
+.summary-from{color:var(--t3);}
+.summary-to{color:var(--t1);}
+.summary-change{font-size:10px;padding:2px 6px;border-radius:4px;}
+.summary-change.pos{background:var(--gd);color:var(--green);}
+.summary-change.neg{background:var(--rd);color:var(--red);}
+.summary-change.flat{background:var(--bg3);color:var(--t3);}
+.summary-highlight{margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:11px;color:var(--t2);line-height:1.5;border-left:3px solid var(--green);}
+
+/* TRAFFIC LIGHT */
+.traffic-card{margin:0 16px 10px;background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:14px 16px;}
+.traffic-header{margin-bottom:12px;}
+.traffic-title{font-size:13px;color:var(--t1);}
+.traffic-sub{font-size:9px;color:var(--t3);margin-top:2px;}
+.traffic-week-labels{display:flex;margin-bottom:6px;}
+.twl-spacer{min-width:90px;}
+.twl-week{flex:1;font-size:8px;color:var(--t3);text-align:center;letter-spacing:0.06em;}
+.traffic-row{display:flex;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);}
+.traffic-row:last-child{border-bottom:none;}
+.traffic-metric{min-width:90px;font-size:10px;color:var(--t2);}
+.traffic-dots{display:flex;flex:1;gap:0;}
+.traffic-dot-wrap{flex:1;display:flex;justify-content:center;align-items:center;}
+.traffic-dot{width:14px;height:14px;border-radius:50%;}
+.traffic-dot.green{background:var(--green);}
+.traffic-dot.yellow{background:var(--yellow);}
+.traffic-dot.red{background:var(--red);}
+.traffic-legend{display:flex;gap:12px;margin-top:10px;font-size:9px;color:var(--t3);}
+.tl-item{display:flex;align-items:center;gap:5px;}
+.tl-dot{width:8px;height:8px;border-radius:50%;}
+
 /* Baseline */
 .baseline-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 10px;}
 .bl-card{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:14px;}
@@ -461,6 +505,8 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'DM Mono'
     </div>
 
     <div class="sec">Since March 1 — before vs now</div>
+    <div id="summary-card"></div>
+    <div id="traffic-light"></div>
     <div id="baseline-cards"></div>
     <div id="baseline-full-charts"></div>
   </div>
@@ -1150,6 +1196,8 @@ function buildHealthSection(metrics){
     drawFullChart('ch-rhr',sorted28(rhr28),'#60a5fa',[65]);
     buildSleepBars(sleep7.slice(-7));
     buildBaselineComparison(metrics);
+    buildSummaryCard(metrics);
+    buildTrafficLight(metrics);
   });
 }
 
@@ -1180,6 +1228,100 @@ function buildSignals(hrv7,rhr7,deep7,bd7,vo2,resp7){
   if(bda>=3)sigs.push({t:'alert',title:'Sleep disturbances — High',body:`Avg ${bda.toFixed(1)}/h. No intensive training. Extra sleep prep needed.`});
   if(respa>=15)sigs.push({t:'warn',title:'Resp rate — Elevated',body:`Avg ${respa.toFixed(1)}/min during sleep. ≥15 = stress response. Continue breathing protocol.`});
   sigs.forEach(s=>{c.innerHTML+=`<div class="signal-card ${s.t}"><div class="sig-title">${s.title}</div><div class="sig-body">${s.body}</div></div>`;});
+}
+
+// ════════════════════════════════════
+// SUMMARY CARD (option 5)
+// ════════════════════════════════════
+function buildSummaryCard(metrics) {
+  const el = document.getElementById('summary-card');
+  if (!el) return;
+  const BD = '2026-03-01';
+  function wAvg(name, s, e) {
+    const v = (metrics[name]||[]).filter(r=>{const d=(r.date||'').slice(0,10);return d>=s&&d<=e&&r.qty>0;}).map(r=>r.qty);
+    return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;
+  }
+  const bHrv=wAvg('heart_rate_variability',BD,'2026-03-07'), cHrv=wAvg('heart_rate_variability','2026-03-31','2026-04-06');
+  const bRhr=wAvg('resting_heart_rate',BD,'2026-03-07'),     cRhr=wAvg('resting_heart_rate','2026-03-31','2026-04-06');
+  const bVo2=wAvg('vo2_max',BD,'2026-03-07'),                cVo2=wAvg('vo2_max','2026-03-31','2026-04-06');
+  const bResp=wAvg('respiratory_rate',BD,'2026-03-07'),      cResp=wAvg('respiratory_rate','2026-03-31','2026-04-06');
+  const sAvg=(s,e)=>{const v=(metrics['sleep_analysis']||[]).filter(r=>{const d=(r.date||'').slice(0,10);return d>=s&&d<=e&&r.deep>0;}).map(r=>r.deep);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;};
+  const bDeep=sAvg(BD,'2026-03-07'), cDeep=sAvg('2026-03-31','2026-04-06');
+  const allRhr=(metrics['resting_heart_rate']||[]).filter(r=>r.qty>0).map(r=>r.qty);
+  const peakRhr=allRhr.length?Math.max(...allRhr):0;
+  function cls(diff,thr,higher){const imp=higher?diff>thr:diff<-thr;const dec=higher?diff<-thr:diff>thr;return imp?'improved':dec?'declined':'stable';}
+  const results=[
+    {name:'HRV',        from:bHrv.toFixed(1), to:cHrv.toFixed(1), unit:'ms',   diff:cHrv-bHrv,   c:cls(cHrv-bHrv,  0.5,true)  },
+    {name:'Resting HR', from:bRhr.toFixed(0), to:cRhr.toFixed(0), unit:'bpm',  diff:cRhr-bRhr,   c:cls(cRhr-bRhr,  0.5,false) },
+    {name:'Deep sleep', from:bDeep.toFixed(2),to:cDeep.toFixed(2),unit:'h',    diff:cDeep-bDeep, c:cls(cDeep-bDeep,0.05,true) },
+    {name:'VO₂max',     from:bVo2.toFixed(1), to:cVo2.toFixed(1), unit:'',     diff:cVo2-bVo2,   c:cls(cVo2-bVo2,  0.2,true)  },
+    {name:'Resp rate',  from:bResp.toFixed(1),to:cResp.toFixed(1),unit:'/min', diff:cResp-bResp, c:cls(cResp-bResp,0.3,false) },
+  ];
+  const imp=results.filter(r=>r.c==='improved').length, stab=results.filter(r=>r.c==='stable').length, dec=results.filter(r=>r.c==='declined').length;
+  const rhrDrop=peakRhr>0?Math.round(peakRhr-cRhr):0;
+  const deepPct=bDeep>0?Math.round((cDeep-bDeep)/bDeep*100):0;
+  let hl=rhrDrop>=5?`Biggest win: Resting HR dropped ${rhrDrop} bpm from peak (${Math.round(peakRhr)} → ${Math.round(cRhr)} bpm). Real autonomic improvement.`:'';
+  if(deepPct>=10)hl+=(hl?' ':'')+'Deep sleep +'+deepPct+'% vs March 1 — still below target (≥1.5h) but trending right.';
+  if(!hl)hl='Progress is real but modest. Consistency over the coming weeks matters more than any single number.';
+  el.innerHTML=`<div class="summary-card">
+    <div class="summary-header"><div><div class="summary-title">Progress summary</div><div class="summary-period">Mar 1–7 vs Mar 31–Apr 6 · verified data</div></div></div>
+    <div class="summary-badges">
+      ${imp>0?`<div class="summary-badge improved">↑ ${imp} improving</div>`:''}
+      ${stab>0?`<div class="summary-badge stable">→ ${stab} stable</div>`:''}
+      ${dec>0?`<div class="summary-badge declined">↓ ${dec} declining</div>`:''}
+    </div>
+    <div class="summary-rows">${results.map(r=>{
+      const ds=(r.diff>0?'+':'')+r.diff.toFixed(r.unit==='h'?2:1)+r.unit;
+      const cc=r.c==='improved'?'pos':r.c==='declined'?'neg':'flat';
+      const arrow=r.c==='improved'?'↑':r.c==='declined'?'↓':'→';
+      return`<div class="summary-row"><div class="summary-metric">${r.name}</div><div class="summary-values"><span class="summary-from">${r.from}${r.unit}</span><span style="color:var(--t3)">→</span><span class="summary-to">${r.to}${r.unit}</span><span class="summary-change ${cc}">${arrow} ${ds}</span></div></div>`;
+    }).join('')}</div>
+    <div class="summary-highlight">${hl}</div>
+  </div>`;
+}
+
+// ════════════════════════════════════
+// TRAFFIC LIGHT (option 3)
+// ════════════════════════════════════
+function buildTrafficLight(metrics) {
+  const el = document.getElementById('traffic-light');
+  if (!el) return;
+  const weeks=[
+    {label:'W1\n1–7/3',  s:'2026-03-01',e:'2026-03-07'},
+    {label:'W2\n8–14/3', s:'2026-03-08',e:'2026-03-14'},
+    {label:'W3\n15–21/3',s:'2026-03-15',e:'2026-03-21'},
+    {label:'W4\n22–28/3',s:'2026-03-22',e:'2026-03-28'},
+    {label:'W5\nNow',    s:'2026-03-29',e:'2026-04-06'},
+  ];
+  function wAvg(name,s,e){const v=(metrics[name]||[]).filter(r=>{const d=(r.date||'').slice(0,10);return d>=s&&d<=e&&r.qty>0;}).map(r=>r.qty);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;}
+  function sAvg(s,e){const v=(metrics['sleep_analysis']||[]).filter(r=>{const d=(r.date||'').slice(0,10);return d>=s&&d<=e&&r.deep>0;}).map(r=>r.deep);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;}
+  const cfg=[
+    {name:'HRV',       get:(s,e)=>wAvg('heart_rate_variability',s,e), color:v=>v>=36?'green':v>=31?'yellow':'red', unit:'ms',  dec:1},
+    {name:'Resting HR',get:(s,e)=>wAvg('resting_heart_rate',s,e),     color:v=>v<=61?'green':v<=64?'yellow':'red', unit:'bpm', dec:0},
+    {name:'Deep sleep',get:(s,e)=>sAvg(s,e),                          color:v=>v>=1.0?'green':v>=0.75?'yellow':'red',unit:'h',dec:2},
+    {name:'VO₂max',    get:(s,e)=>wAvg('vo2_max',s,e),               color:v=>v>=37.5?'green':v>=36.5?'yellow':'red',unit:'', dec:1},
+    {name:'Resp rate', get:(s,e)=>wAvg('respiratory_rate',s,e),       color:v=>v<=13.5?'green':v<=14.5?'yellow':'red',unit:'/min',dec:1},
+  ];
+  const wlbls=weeks.map(w=>`<div class="twl-week" style="font-size:8px;color:var(--t3);text-align:center;">${w.label.replace('\n','<br>')}</div>`).join('');
+  const rows=cfg.map(m=>{
+    const dots=weeks.map(w=>{
+      const v=m.get(w.s,w.e);
+      if(!v)return`<div class="traffic-dot-wrap"><div class="traffic-dot" style="background:var(--bg3)"></div></div>`;
+      const c=m.color(v);
+      return`<div class="traffic-dot-wrap" title="${v.toFixed(m.dec)}${m.unit}"><div class="traffic-dot ${c}"></div></div>`;
+    }).join('');
+    return`<div class="traffic-row"><div class="traffic-metric">${m.name}</div><div class="traffic-dots">${dots}</div></div>`;
+  }).join('');
+  el.innerHTML=`<div class="traffic-card">
+    <div class="traffic-header"><div class="traffic-title">Weekly status</div><div class="traffic-sub">Per metric · March 1 to now</div></div>
+    <div style="display:flex;margin-bottom:6px;"><div style="min-width:90px;"></div>${wlbls}</div>
+    ${rows}
+    <div class="traffic-legend">
+      <div class="tl-item"><div class="tl-dot" style="background:var(--green)"></div>Good</div>
+      <div class="tl-item"><div class="tl-dot" style="background:var(--yellow)"></div>Building</div>
+      <div class="tl-item"><div class="tl-dot" style="background:var(--red)"></div>Attention</div>
+    </div>
+  </div>`;
 }
 
 function buildBaselineComparison(metrics){
