@@ -1488,6 +1488,24 @@ function buildTrafficLight(metrics) {
   ];
 
   function buildTable(weeks, tableId) {
+    // Calculate weekly recovery score for each week
+    function weekScore(s, e) {
+      const h7=[],r7=[],d7=[],resp7=[],bd7=[],st7=[],cr7=[];
+      function wv(name){return(metrics[name]||[]).filter(r=>{const d=(r.date||'').slice(0,10);return d>=s&&d<=e&&r.qty>0;}).map(r=>r.qty);}
+      const hrvV=wv('heart_rate_variability'),rhrV=wv('resting_heart_rate'),respV=wv('respiratory_rate'),bdV=wv('breathing_disturbances'),stV=wv('step_count'),crV=wv('cardio_recovery');
+      const slV=(metrics['sleep_analysis']||[]).filter(r=>{const d=(r.date||'').slice(0,10);return d>=s&&d<=e&&(r.deep||0)>0;}).map(r=>r.deep||0);
+      if(!hrvV.length)return null;
+      const sc=calcScore(hrvV,rhrV,slV,respV,bdV,stV,crV);
+      return sc.total;
+    }
+
+    const scoreCells = weeks.map(w => {
+      const sc = weekScore(w.s, w.e);
+      if (sc === null) return `<div style="flex:1;min-width:36px;text-align:center;font-size:9px;color:var(--t3);">—</div>`;
+      const col = sc >= 80 ? 'var(--green)' : sc >= 60 ? 'var(--yellow)' : 'var(--red)';
+      return `<div style="flex:1;min-width:36px;text-align:center;font-size:10px;font-weight:500;color:${col};">${sc}</div>`;
+    }).join('');
+
     const wlbls = weeks.map(w=>`<div style="flex:1;min-width:36px;font-size:8px;color:var(--t3);text-align:center;white-space:nowrap;">${w.label.replace('\n','<br>')}</div>`).join('');
     const rows = cfg.map(m=>{
       const dots = weeks.map(w=>{
@@ -1502,9 +1520,17 @@ function buildTrafficLight(metrics) {
         <div style="display:flex;flex:1;">${dots}</div>
       </div>`;
     }).join('');
+
+    // Score row at top
+    const scoreRow = `<div style="display:flex;align-items:center;padding:6px 0;border-bottom:2px solid var(--line2);">
+      <div style="min-width:82px;font-size:9px;color:var(--t3);flex-shrink:0;letter-spacing:0.08em;text-transform:uppercase;">Score</div>
+      <div style="display:flex;flex:1;">${scoreCells}</div>
+    </div>`;
+
     return `<div id="${tableId}" style="overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;">
       <div style="min-width:${82 + weeks.length*36}px;">
         <div style="display:flex;margin-bottom:6px;padding-left:82px;">${wlbls}</div>
+        ${scoreRow}
         ${rows}
       </div>
     </div>`;
@@ -1677,7 +1703,7 @@ let wmState = {
 };
 
 function openWorkoutMode() {
-  const sess = SESSIONS[currentSessType];
+  const sess = SESSION_TEMPLATES[currentSessType];
   if (!sess) return;
   const prev = DB.get('prev_weights') || {};
   const exIds = getSessionExercises(currentSessType, currentPhase, currentHrv);
@@ -1868,29 +1894,3 @@ function wmSaveAndClose() {
   toast('Workout saved ✓');
 }
 
-function closeWorkoutMode() {
-  if (Object.values(wmState.log).some(s=>s.length>0)) {
-    if (!confirm('End workout? Progress will be lost.')) return;
-  }
-  stopWmTimer();
-  document.getElementById('workout-modal').classList.remove('open');
-}
-
-// ════════════════════════════════════
-// INIT
-// ════════════════════════════════════
-function init(){
-  buildNumpad();
-  document.getElementById('today-date').textContent=new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
-  const checkins=DB.get('checkins')||{};const tc=checkins[TODAY];
-  if(tc){currentHrv=tc.hrv;updateHrvDisplay(tc.hrv);buildTodayPlan(tc.hrv);}
-  else{const metrics=DB.get('health_metrics');currentPhase=detectPhase(metrics);updatePhaseBanner(currentPhase,null);}
-  const m=DB.get('health_metrics');if(m){updateTodayFromHealth(m);}
-  if(m){const hrv7=last7v(getByDate(m,'heart_rate_variability',7)),rhr7=last7v(getByDate(m,'resting_heart_rate',7));const cutoff7=new Date();cutoff7.setDate(cutoff7.getDate()-7);const sl7=[];(m['sleep_analysis']||[]).forEach(r=>{if(safeDate((r.date||'').slice(0,10))>=cutoff7)sl7.push(r);});const deep7=sl7.slice(-7).map(s=>s.deep||0);const sc=calcScore(hrv7,rhr7,deep7,last7v(getByDate(m,'respiratory_rate',7)),last7v(getByDate(m,'breathing_disturbances',7)),last7v(getByDate(m,'step_count',7)),last7v(getByDate(m,'cardio_recovery',7)));document.getElementById('sv-score').textContent=sc.total;document.getElementById('sd-score').style.background=sc.total>=80?'var(--green)':sc.total>=60?'var(--yellow)':'var(--red)';}
-  const ub=DB.get('health_uploaded');if(ub){document.getElementById('uc-badge').style.display='inline-block';document.getElementById('uc-badge').textContent=ub;document.getElementById('uc-icon').textContent='✓';}
-  document.getElementById('toggle-timer').classList.toggle('on',settings.timerOn);
-}
-document.addEventListener('DOMContentLoaded',init);
-</script>
-</body>
-</html>
