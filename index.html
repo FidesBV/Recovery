@@ -336,6 +336,45 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'DM Mono'
 .rt-bar-bg{height:3px;background:var(--line);border-radius:2px;}
 .rt-bar{height:3px;border-radius:2px;background:var(--yellow);transition:width 1s linear;}
 
+/* WORKOUT MODE MODAL */
+#workout-modal{position:fixed;inset:0;background:var(--bg);z-index:500;display:none;flex-direction:column;}
+#workout-modal.open{display:flex;}
+.wm-header{display:flex;justify-content:space-between;align-items:center;padding:calc(var(--safe-t)+16px) 20px 12px;border-bottom:1px solid var(--line);flex-shrink:0;}
+.wm-title{font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--t3);}
+.wm-close{font-size:13px;color:var(--t2);cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;}
+.wm-body{flex:1;display:flex;flex-direction:column;padding:0 20px;overflow:hidden;}
+.wm-progress{display:flex;gap:6px;padding:14px 0 10px;}
+.wm-prog-dot{height:3px;flex:1;border-radius:2px;background:var(--line);}
+.wm-prog-dot.done{background:var(--green);}
+.wm-prog-dot.active{background:var(--t1);}
+.wm-ex-name{font-family:'Instrument Serif',serif;font-size:28px;color:var(--t1);line-height:1.1;margin-bottom:4px;}
+.wm-ex-note{font-size:11px;color:var(--t3);margin-bottom:6px;line-height:1.5;}
+.wm-set-counter{font-size:11px;color:var(--t2);margin-bottom:20px;}
+.wm-controls{display:flex;gap:16px;margin-bottom:24px;}
+.wm-control{flex:1;background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:16px;text-align:center;}
+.wm-ctrl-label{font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:var(--t3);margin-bottom:10px;}
+.wm-ctrl-val{font-size:42px;font-weight:300;color:var(--t1);line-height:1;margin-bottom:10px;}
+.wm-ctrl-unit{font-size:11px;color:var(--t3);margin-bottom:12px;}
+.wm-ctrl-btns{display:flex;gap:8px;justify-content:center;}
+.wm-btn-adj{width:48px;height:48px;border-radius:12px;border:1px solid var(--line2);background:var(--bg3);font-size:22px;color:var(--t1);cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;-webkit-tap-highlight-color:transparent;transition:background 0.1s;}
+.wm-btn-adj:active{background:var(--line2);}
+.wm-done-btn{width:100%;padding:20px;background:var(--green);color:#000;border:none;border-radius:16px;font-family:'DM Mono',monospace;font-size:14px;letter-spacing:0.06em;cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent;transition:background 0.15s;}
+.wm-done-btn:active{background:#22c55e;}
+.wm-done-btn.last{background:var(--t1);}
+.wm-rest{flex-shrink:0;padding:12px 20px;background:var(--bg2);border-top:1px solid var(--line);display:none;}
+.wm-rest.show{display:block;}
+.wm-rest-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.wm-rest-lbl{font-size:9px;color:var(--t3);letter-spacing:0.1em;text-transform:uppercase;}
+.wm-rest-val{font-size:20px;font-weight:300;color:var(--yellow);}
+.wm-rest-skip{font-size:10px;color:var(--t3);cursor:pointer;}
+.wm-rest-bar-bg{height:3px;background:var(--line);border-radius:2px;}
+.wm-rest-bar{height:3px;border-radius:2px;background:var(--yellow);transition:width 1s linear;}
+.wm-footer{padding:12px 20px calc(var(--safe-b)+12px);flex-shrink:0;display:flex;gap:10px;}
+.wm-prev{flex:1;padding:14px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--t2);cursor:pointer;text-align:center;}
+
+/* ADDITIONAL METRICS */
+.add-metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 10px;}
+
 /* BREATHING MODAL */
 #breath-modal{position:fixed;inset:0;background:rgba(0,0,0,0.93);z-index:400;display:none;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;}
 #breath-modal.open{display:flex;}
@@ -429,6 +468,13 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'DM Mono'
 
   <button class="save-session-btn" id="save-btn" onclick="saveSession()">Save session ✓</button>
 
+  <!-- START WORKOUT button -->
+  <div id="start-workout-wrap" style="display:none;padding:0 16px 12px;">
+    <button onclick="openWorkoutMode()" style="width:100%;padding:16px;background:var(--bg2);border:1px solid var(--green);border-radius:14px;font-family:'DM Mono',monospace;font-size:12px;color:var(--green);cursor:pointer;letter-spacing:0.06em;display:flex;align-items:center;justify-content:center;gap:8px;">
+      <span style="font-size:16px;">▶</span> Start Workout Mode
+    </button>
+  </div>
+
   <div class="breath-card">
     <div style="font-size:20px">〇</div>
     <div class="bc-text">
@@ -496,7 +542,17 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'DM Mono'
     <div class="chart-card">
       <div class="cc-header"><div class="cc-title">Sleep — last 7 nights</div><div class="cc-sub">hours</div></div>
       <div id="sleep-bars"></div>
-      <div class="cc-legend" style="margin-top:8px;"><span><span style="color:rgba(255,255,255,0.88)">■</span> Deep</span><span><span style="color:rgba(255,255,255,0.35)">■</span> REM</span><span><span style="color:rgba(255,255,255,0.12)">■</span> Core</span><span style="margin-left:auto;color:var(--red)">Goal ≥1.5h</span></div>
+      <div class="cc-legend" style="margin-top:8px;">
+        <span><span style="color:rgba(255,255,255,0.88)">■</span> Deep</span>
+        <span><span style="color:rgba(255,255,255,0.35)">■</span> REM</span>
+        <span><span style="color:rgba(255,255,255,0.12)">■</span> Core</span>
+        <span style="margin-left:auto;color:var(--red)">Goal ≥1.5h deep</span>
+      </div>
+      <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border-radius:8px;font-size:10px;color:var(--t3);line-height:1.7;">
+        <span style="color:rgba(255,255,255,0.88)">■ Deep</span> — Slow wave sleep. Most restorative. Physical recovery, immune function. Peaks early in night.<br>
+        <span style="color:rgba(255,255,255,0.4)">■ REM</span> — Rapid eye movement. Dreams, emotional processing, memory consolidation.<br>
+        <span style="color:rgba(255,255,255,0.2)">■ Core</span> — Light sleep (N1+N2). Largest portion of night. Transition between stages.
+      </div>
     </div>
 
     <div class="chart-card">
@@ -509,6 +565,14 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'DM Mono'
     <div id="traffic-light"></div>
     <div id="baseline-cards"></div>
     <div id="baseline-full-charts"></div>
+
+    <div class="sec">Additional metrics</div>
+    <div class="add-metrics-grid">
+      <div class="mc"><div class="mc-lbl">Weight</div><div><span class="mc-val" id="m-weight">—</span><span class="mc-unit"> kg</span></div><div class="mc-trend" id="mt-weight">Goal: 85 kg</div></div>
+      <div class="mc"><div class="mc-lbl">Walk asymmetry</div><div><span class="mc-val" id="m-asym">—</span><span class="mc-unit">%</span></div><div class="mc-trend" id="mt-asym">Goal: &lt;5%</div></div>
+      <div class="mc"><div class="mc-lbl">Wrist temp</div><div><span class="mc-val" id="m-wrist">—</span><span class="mc-unit">°C</span></div><div class="mc-trend" id="mt-wrist">Baseline offset</div></div>
+      <div class="mc"><div class="mc-lbl">Active energy</div><div><span class="mc-val" id="m-energy">—</span><span class="mc-unit"> kcal</span></div><div class="mc-trend" id="mt-energy">Daily avg</div></div>
+    </div>
   </div>
 
   <div class="sec">Strength progress</div>
@@ -541,6 +605,52 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'DM Mono'
   <div class="rt-row"><span class="rt-lbl">Rest</span><span class="rt-val" id="rt-val">1:30</span><span class="rt-skip" onclick="skipTimer()">Skip →</span></div>
   <div class="rt-bar-bg"><div class="rt-bar" id="rt-bar" style="width:100%"></div></div>
 </div>
+</div>
+
+<!-- WORKOUT MODE -->
+<div id="workout-modal">
+  <div class="wm-header">
+    <div class="wm-title" id="wm-session-label">Strength A</div>
+    <div class="wm-close" onclick="closeWorkoutMode()">✕ End</div>
+  </div>
+  <div class="wm-body">
+    <div class="wm-progress" id="wm-progress"></div>
+    <div class="wm-ex-name" id="wm-ex-name">—</div>
+    <div class="wm-set-counter" id="wm-set-counter">Set 1 of 3</div>
+    <div class="wm-ex-note" id="wm-ex-note">—</div>
+    <div class="wm-controls">
+      <div class="wm-control">
+        <div class="wm-ctrl-label" id="wm-kg-label">Weight</div>
+        <div class="wm-ctrl-val" id="wm-kg-val">—</div>
+        <div class="wm-ctrl-unit" id="wm-kg-unit">kg</div>
+        <div class="wm-ctrl-btns">
+          <div class="wm-btn-adj" onclick="adjustVal('kg',-0.5)">−</div>
+          <div class="wm-btn-adj" onclick="adjustVal('kg', 0.5)">+</div>
+        </div>
+      </div>
+      <div class="wm-control">
+        <div class="wm-ctrl-label">Reps</div>
+        <div class="wm-ctrl-val" id="wm-reps-val">—</div>
+        <div class="wm-ctrl-unit">reps</div>
+        <div class="wm-ctrl-btns">
+          <div class="wm-btn-adj" onclick="adjustVal('reps',-1)">−</div>
+          <div class="wm-btn-adj" onclick="adjustVal('reps', 1)">+</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="wm-rest" id="wm-rest">
+    <div class="wm-rest-row">
+      <span class="wm-rest-lbl">Rest</span>
+      <span class="wm-rest-val" id="wm-rest-val">1:30</span>
+      <span class="wm-rest-skip" onclick="skipWmTimer()">Skip →</span>
+    </div>
+    <div class="wm-rest-bar-bg"><div class="wm-rest-bar" id="wm-rest-bar" style="width:100%"></div></div>
+  </div>
+  <div class="wm-footer">
+    <div class="wm-prev" onclick="wmPrev()" id="wm-prev-btn" style="display:none">← Back</div>
+    <button class="wm-done-btn" id="wm-done-btn" onclick="wmDoneSet()">Set done ✓</button>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -953,6 +1063,9 @@ function buildTodayPlan(hrv) {
 
   progWrap.style.display='block';
   updateProgress();
+  // Show workout mode button
+  const swWrap = document.getElementById('start-workout-wrap');
+  if (swWrap) swWrap.style.display = 'block';
 }
 
 function updatePhaseBanner(phase, hrv) {
@@ -1051,8 +1164,53 @@ function setProgFilter(f,el){progFilter=f;document.querySelectorAll('.fp').forEa
 function buildProgress(){
   document.getElementById('prog-date').textContent=new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
   const metrics=DB.get('health_metrics');
-  if(metrics)buildHealthSection(metrics);
+  if(metrics){buildHealthSection(metrics);buildAdditionalMetrics(metrics);}
   buildStrengthSection();
+}
+
+function buildAdditionalMetrics(metrics) {
+  // Weight
+  const wt = (metrics['weight_body_mass']||[]).sort((a,b)=>a.date.localeCompare(b.date));
+  if (wt.length) {
+    const latest = wt[wt.length-1].qty;
+    const earliest = wt[0].qty;
+    document.getElementById('m-weight').textContent = latest;
+    const diff = +(latest - earliest).toFixed(1);
+    const toGoal = +(latest - 85).toFixed(1);
+    document.getElementById('mt-weight').innerHTML = `<span style="color:${diff<0?'var(--green)':'var(--t2)'}">${diff<0?diff+' kg':'No change'}</span> · ${toGoal} kg to goal`;
+  }
+
+  // Walking asymmetry (lower = more symmetric = better)
+  const asym7 = getByDate(metrics,'walking_asymmetry_percentage',7);
+  const asymVals = Object.values(asym7).filter(v=>v>0);
+  if (asymVals.length) {
+    const asymAvg = avg(asymVals) * 100; // convert to percentage
+    document.getElementById('m-asym').textContent = asymAvg.toFixed(1);
+    const col = asymAvg < 5 ? 'var(--green)' : asymAvg < 10 ? 'var(--yellow)' : 'var(--red)';
+    document.getElementById('mt-asym').innerHTML = `<span style="color:${col}">${asymAvg < 5 ? 'Symmetric ✓' : asymAvg < 10 ? 'Slight asymmetry' : '⚠ Compensation pattern'}</span>`;
+  }
+
+  // Wrist temperature
+  const wristAll = (metrics['apple_sleeping_wrist_temperature']||[]).map(r=>r.qty).filter(v=>v>0);
+  if (wristAll.length) {
+    const baseline = wristAll.slice().sort((a,b)=>a-b)[Math.floor(wristAll.length/2)]; // median
+    const latest7 = (metrics['apple_sleeping_wrist_temperature']||[])
+      .sort((a,b)=>a.date.localeCompare(b.date)).slice(-3).map(r=>r.qty);
+    const latestAvg = avg(latest7.filter(v=>v>0));
+    const offset = +(latestAvg - baseline).toFixed(2);
+    document.getElementById('m-wrist').textContent = latestAvg.toFixed(1);
+    const col = Math.abs(offset) < 0.3 ? 'var(--green)' : Math.abs(offset) < 0.5 ? 'var(--yellow)' : 'var(--red)';
+    document.getElementById('mt-wrist').innerHTML = `<span style="color:${col}">${offset > 0 ? '+' : ''}${offset}°C from baseline${Math.abs(offset) >= 0.5 ? ' ⚠' : ''}</span>`;
+  }
+
+  // Active energy (kcal/day avg last 7)
+  const ae7 = last7v(getByDate(metrics,'active_energy',7));
+  if (ae7.some(v=>v>0)) {
+    const aeAvg = Math.round(avg(ae7) / 4.184); // kJ to kcal
+    document.getElementById('m-energy').textContent = aeAvg;
+    const col = aeAvg > 600 ? 'var(--green)' : aeAvg > 400 ? 'var(--yellow)' : 'var(--red)';
+    document.getElementById('mt-energy').innerHTML = `<span style="color:${col}">${aeAvg > 600 ? 'Active' : aeAvg > 400 ? 'Moderate' : 'Low'} · 7d avg</span>`;
+  }
 }
 
 function buildStrengthSection(){
@@ -1135,7 +1293,8 @@ function onJsonUpload(e){
   r.readAsText(file);
 }
 
-function getByDate(metrics,name,days=28){const r={},cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);(metrics[name]||[]).forEach(rec=>{const d=(rec.date||'').slice(0,10);if(d&&new Date(d)>=cutoff)r[d]=rec.qty||0;});return r;}
+function safeDate(str){const p=str.slice(0,10).split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
+function getByDate(metrics,name,days=28){const r={},cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);(metrics[name]||[]).forEach(rec=>{const d=(rec.date||'').slice(0,10);if(d&&safeDate(d)>=cutoff)r[d]=rec.qty||0;});return r;}
 function sorted28(obj){return Object.entries(obj).sort((a,b)=>a[0].localeCompare(b[0])).slice(-28);}
 function last7v(obj){return sorted28(obj).slice(-7).map(e=>e[1]);}
 function avg(a){const v=a.filter(x=>x>0);return v.length?v.reduce((s,x)=>s+x,0)/v.length:0;}
@@ -1167,7 +1326,7 @@ function buildHealthSection(metrics){
   const steps28=getByDate(metrics,'step_count',28);
 
   const cutoff7=new Date();cutoff7.setDate(cutoff7.getDate()-7);
-  const sleep7=[];(metrics['sleep_analysis']||[]).forEach(r=>{if(new Date((r.date||'').slice(0,10))>=cutoff7)sleep7.push(r);});
+  const sleep7=[];(metrics['sleep_analysis']||[]).forEach(r=>{if(safeDate((r.date||'').slice(0,10))>=cutoff7)sleep7.push(r);});
   sleep7.sort((a,b)=>a.date.localeCompare(b.date));
 
   const hrv7=last7v(hrv28),rhr7=last7v(rhr28),deep7=sleep7.slice(-7).map(s=>s.deep||0);
@@ -1205,7 +1364,7 @@ function updateTodayFromHealth(metrics){
   const rhr3=getByDate(metrics,'resting_heart_rate',3);const rhrV=Object.values(rhr3).filter(v=>v>0);const rhrL=rhrV.pop()||0;
   if(rhrL>0){document.getElementById('sv-rhr').textContent=Math.round(rhrL);document.getElementById('sd-rhr').style.background=rhrL<=62?'var(--green)':rhrL<=65?'var(--yellow)':'var(--red)';}
   const cutoff=new Date();cutoff.setDate(cutoff.getDate()-2);
-  const sl2=[];(metrics['sleep_analysis']||[]).forEach(r=>{if(new Date((r.date||'').slice(0,10))>=cutoff)sl2.push(r);});
+  const sl2=[];(metrics['sleep_analysis']||[]).forEach(r=>{if(safeDate((r.date||'').slice(0,10))>=cutoff)sl2.push(r);});
   sl2.sort((a,b)=>b.date.localeCompare(a.date));
   const last=sl2[0];
   if(last){document.getElementById('sv-sleep').textContent=(last.totalSleep||0).toFixed(1);document.getElementById('sd-sleep').style.background=(last.totalSleep||0)>=7?'var(--green)':(last.totalSleep||0)>=6?'var(--yellow)':'var(--red)';document.getElementById('sv-deep').textContent=(last.deep||0).toFixed(2);document.getElementById('sd-deep').style.background=(last.deep||0)>=1.5?'var(--green)':(last.deep||0)>=0.8?'var(--yellow)':'var(--red)';}
@@ -1286,43 +1445,109 @@ function buildSummaryCard(metrics) {
 function buildTrafficLight(metrics) {
   const el = document.getElementById('traffic-light');
   if (!el) return;
-  const weeks=[
-    {label:'W1\n1–7/3',  s:'2026-03-01',e:'2026-03-07'},
-    {label:'W2\n8–14/3', s:'2026-03-08',e:'2026-03-14'},
-    {label:'W3\n15–21/3',s:'2026-03-15',e:'2026-03-21'},
-    {label:'W4\n22–28/3',s:'2026-03-22',e:'2026-03-28'},
-    {label:'W5\nNow',    s:'2026-03-29',e:'2026-04-06'},
-  ];
+
+  // Dynamically generate all weeks from first data point
+  function allWeeks() {
+    const allDates = (metrics['heart_rate_variability']||[]).map(r=>(r.date||'').slice(0,10)).filter(Boolean).sort();
+    if (!allDates.length) return [];
+    const first = new Date(allDates[0]);
+    // Align to Monday
+    const day = first.getDay();
+    const offset = day === 0 ? -6 : 1 - day;
+    first.setDate(first.getDate() + offset);
+
+    const weeks = [];
+    let cursor = new Date(first);
+    const now = new Date();
+    let wNum = 1;
+    while (cursor <= now) {
+      const end = new Date(cursor); end.setDate(end.getDate() + 6);
+      const sStr = cursor.toISOString().slice(0,10);
+      const eStr = end.toISOString().slice(0,10);
+      const startLabel = cursor.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+      weeks.push({ label: `W${wNum}\n${startLabel}`, s: sStr, e: eStr });
+      cursor.setDate(cursor.getDate() + 7);
+      wNum++;
+    }
+    return weeks;
+  }
+
+  const allW = allWeeks();
+  // Recent 5 weeks shown by default
+  const recentW = allW.slice(-5);
+
   function wAvg(name,s,e){const v=(metrics[name]||[]).filter(r=>{const d=(r.date||'').slice(0,10);return d>=s&&d<=e&&r.qty>0;}).map(r=>r.qty);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;}
-  function sAvg(s,e){const v=(metrics['sleep_analysis']||[]).filter(r=>{const d=(r.date||'').slice(0,10);return d>=s&&d<=e&&r.deep>0;}).map(r=>r.deep);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;}
+  function sAvg(s,e){const v=(metrics['sleep_analysis']||[]).filter(r=>{const d=(r.date||'').slice(0,10);return d>=s&&d<=e&&(r.deep||0)>0;}).map(r=>r.deep||0);return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;}
+
   const cfg=[
-    {name:'HRV',       get:(s,e)=>wAvg('heart_rate_variability',s,e), color:v=>v>=36?'green':v>=31?'yellow':'red', unit:'ms',  dec:1},
-    {name:'Resting HR',get:(s,e)=>wAvg('resting_heart_rate',s,e),     color:v=>v<=61?'green':v<=64?'yellow':'red', unit:'bpm', dec:0},
-    {name:'Deep sleep',get:(s,e)=>sAvg(s,e),                          color:v=>v>=1.0?'green':v>=0.75?'yellow':'red',unit:'h',dec:2},
-    {name:'VO₂max',    get:(s,e)=>wAvg('vo2_max',s,e),               color:v=>v>=37.5?'green':v>=36.5?'yellow':'red',unit:'', dec:1},
-    {name:'Resp rate', get:(s,e)=>wAvg('respiratory_rate',s,e),       color:v=>v<=13.5?'green':v<=14.5?'yellow':'red',unit:'/min',dec:1},
+    {name:'HRV',        get:(s,e)=>wAvg('heart_rate_variability',s,e), color:v=>v>=36?'green':v>=31?'yellow':'red', unit:'ms',  dec:1},
+    {name:'Resting HR', get:(s,e)=>wAvg('resting_heart_rate',s,e),     color:v=>v<=61?'green':v<=64?'yellow':'red', unit:'bpm', dec:0},
+    {name:'Deep sleep', get:(s,e)=>sAvg(s,e),                          color:v=>v>=1.0?'green':v>=0.75?'yellow':'red',unit:'h',dec:2},
+    {name:'VO₂max',     get:(s,e)=>wAvg('vo2_max',s,e),                color:v=>v>=37.5?'green':v>=36.5?'yellow':'red',unit:'',dec:1},
+    {name:'Resp rate',  get:(s,e)=>wAvg('respiratory_rate',s,e),       color:v=>v<=13.5?'green':v<=14.5?'yellow':'red',unit:'/min',dec:1},
   ];
-  const wlbls=weeks.map(w=>`<div class="twl-week" style="font-size:8px;color:var(--t3);text-align:center;">${w.label.replace('\n','<br>')}</div>`).join('');
-  const rows=cfg.map(m=>{
-    const dots=weeks.map(w=>{
-      const v=m.get(w.s,w.e);
-      if(!v)return`<div class="traffic-dot-wrap"><div class="traffic-dot" style="background:var(--bg3)"></div></div>`;
-      const c=m.color(v);
-      return`<div class="traffic-dot-wrap" title="${v.toFixed(m.dec)}${m.unit}"><div class="traffic-dot ${c}"></div></div>`;
+
+  function buildTable(weeks, tableId) {
+    const wlbls = weeks.map(w=>`<div style="flex:1;min-width:36px;font-size:8px;color:var(--t3);text-align:center;white-space:nowrap;">${w.label.replace('\n','<br>')}</div>`).join('');
+    const rows = cfg.map(m=>{
+      const dots = weeks.map(w=>{
+        const v = m.get(w.s, w.e);
+        if (!v) return `<div style="flex:1;min-width:36px;display:flex;justify-content:center;"><div style="width:12px;height:12px;border-radius:50%;background:var(--bg3);"></div></div>`;
+        const c = m.color(v);
+        const col = c==='green'?'var(--green)':c==='yellow'?'var(--yellow)':'var(--red)';
+        return `<div style="flex:1;min-width:36px;display:flex;justify-content:center;" title="${m.name}: ${v.toFixed(m.dec)}${m.unit}"><div style="width:12px;height:12px;border-radius:50%;background:${col};"></div></div>`;
+      }).join('');
+      return `<div style="display:flex;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);">
+        <div style="min-width:82px;font-size:10px;color:var(--t2);flex-shrink:0;">${m.name}</div>
+        <div style="display:flex;flex:1;">${dots}</div>
+      </div>`;
     }).join('');
-    return`<div class="traffic-row"><div class="traffic-metric">${m.name}</div><div class="traffic-dots">${dots}</div></div>`;
-  }).join('');
-  el.innerHTML=`<div class="traffic-card">
-    <div class="traffic-header"><div class="traffic-title">Weekly status</div><div class="traffic-sub">Per metric · March 1 to now</div></div>
-    <div style="display:flex;margin-bottom:6px;"><div style="min-width:90px;"></div>${wlbls}</div>
-    ${rows}
-    <div class="traffic-legend">
-      <div class="tl-item"><div class="tl-dot" style="background:var(--green)"></div>Good</div>
-      <div class="tl-item"><div class="tl-dot" style="background:var(--yellow)"></div>Building</div>
-      <div class="tl-item"><div class="tl-dot" style="background:var(--red)"></div>Attention</div>
+    return `<div id="${tableId}" style="overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;">
+      <div style="min-width:${82 + weeks.length*36}px;">
+        <div style="display:flex;margin-bottom:6px;padding-left:82px;">${wlbls}</div>
+        ${rows}
+      </div>
+    </div>`;
+  }
+
+  el.innerHTML = `<div class="traffic-card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+      <div>
+        <div class="traffic-title">Weekly status</div>
+        <div class="traffic-sub">Last 5 weeks · tap to expand all ${allW.length} weeks</div>
+      </div>
+      <div id="tl-toggle" onclick="toggleTrafficDrawer()" style="font-size:10px;color:var(--t3);cursor:pointer;padding:4px 8px;background:var(--bg3);border-radius:6px;border:1px solid var(--line2);white-space:nowrap;">All weeks ↓</div>
+    </div>
+
+    <div id="tl-recent">${buildTable(recentW,'tl-recent-table')}</div>
+    <div id="tl-all" style="display:none;">${buildTable(allW,'tl-all-table')}</div>
+
+    <div style="display:flex;gap:12px;margin-top:10px;">
+      <div style="display:flex;align-items:center;gap:5px;font-size:9px;color:var(--t3)"><div style="width:8px;height:8px;border-radius:50%;background:var(--green)"></div>Good</div>
+      <div style="display:flex;align-items:center;gap:5px;font-size:9px;color:var(--t3)"><div style="width:8px;height:8px;border-radius:50%;background:var(--yellow)"></div>Building</div>
+      <div style="display:flex;align-items:center;gap:5px;font-size:9px;color:var(--t3)"><div style="width:8px;height:8px;border-radius:50%;background:var(--red)"></div>Attention</div>
     </div>
   </div>`;
 }
+
+function toggleTrafficDrawer() {
+  const recent = document.getElementById('tl-recent');
+  const all = document.getElementById('tl-all');
+  const btn = document.getElementById('tl-toggle');
+  if (!recent || !all || !btn) return;
+  const isExpanded = all.style.display !== 'none';
+  recent.style.display = isExpanded ? '' : 'none';
+  all.style.display = isExpanded ? 'none' : '';
+  btn.textContent = isExpanded ? 'All weeks ↓' : 'Less ↑';
+  // Scroll all-table to the right (most recent)
+  if (!isExpanded) {
+    setTimeout(() => {
+      const t = document.getElementById('tl-all-table');
+      if (t) t.scrollLeft = t.scrollWidth;
+    }, 50);
+  }
+}
+
 
 function buildBaselineComparison(metrics){
   const cards=document.getElementById('baseline-cards');
@@ -1333,7 +1558,7 @@ function buildBaselineComparison(metrics){
   const hrv=getRange('heart_rate_variability'),rhr=getRange('resting_heart_rate'),vo2=getRange('vo2_max'),resp=getRange('respiratory_rate');
   const cutoff7=new Date();cutoff7.setDate(cutoff7.getDate()-7);
   const sl7From=[],sl7To=[];
-  (metrics['sleep_analysis']||[]).forEach(r=>{const d=(r.date||'').slice(0,10);if(d>=BD&&d<='2026-03-08')sl7From.push(r.deep||0);if(new Date(d)>=cutoff7)sl7To.push(r.deep||0);});
+  (metrics['sleep_analysis']||[]).forEach(r=>{const d=(r.date||'').slice(0,10);if(d>=BD&&d<='2026-03-08')sl7From.push(r.deep||0);if(safeDate(d)>=cutoff7)sl7To.push(r.deep||0);});
   const deepStart=avg(sl7From),deepEnd=avg(sl7To);
 
   const mData=[
@@ -1378,9 +1603,9 @@ function drawMini(id,vals,color){const canvas=document.getElementById(id);if(!ca
 
 function drawFullChart(id,entries,color,thresholds=[]){const canvas=document.getElementById(id);if(!canvas)return;const dpr=window.devicePixelRatio||1,W=canvas.parentElement.offsetWidth-28,H=96;canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+'px';canvas.style.height=H+'px';const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);const data=entries.filter(e=>e[1]>0).map(e=>e[1]);const labels=entries.filter(e=>e[1]>0).map(e=>e[0].slice(5));if(data.length<2)return;const pad={l:2,r:2,t:8,b:16};const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;const allV=[...data,...thresholds];const mn=Math.min(...allV)-2,mx=Math.max(...allV)+2,rng=mx-mn||1;const step=cW/(data.length-1);const toX=i=>pad.l+i*step,toY=v=>pad.t+cH-((v-mn)/rng)*cH;thresholds.forEach((t,i)=>{ctx.beginPath();ctx.moveTo(pad.l,toY(t));ctx.lineTo(W-pad.r,toY(t));ctx.strokeStyle=i===0?'rgba(251,191,36,0.35)':'rgba(74,222,128,0.35)';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);});ctx.beginPath();data.forEach((v,i)=>i===0?ctx.moveTo(toX(i),toY(v)):ctx.lineTo(toX(i),toY(v)));ctx.lineTo(toX(data.length-1),pad.t+cH);ctx.lineTo(toX(0),pad.t+cH);ctx.closePath();ctx.fillStyle='rgba(255,255,255,0.04)';ctx.fill();ctx.beginPath();data.forEach((v,i)=>i===0?ctx.moveTo(toX(i),toY(v)):ctx.lineTo(toX(i),toY(v)));ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.stroke();const pr=Math.max(...data);data.forEach((v,i)=>{if(i===0||i===data.length-1||v===pr){ctx.beginPath();ctx.arc(toX(i),toY(v),v===pr?4:3,0,Math.PI*2);ctx.fillStyle=v===pr?'#fbbf24':color;ctx.fill();}});if(pr>0){const pri=data.indexOf(pr);ctx.fillStyle='#fbbf24';ctx.font='8px DM Mono';ctx.textAlign='center';ctx.fillText(pr.toFixed(1),toX(pri),toY(pr)-7);}ctx.fillStyle='#333';ctx.font='8px DM Mono';[0,Math.floor(data.length/2),data.length-1].forEach(i=>{ctx.textAlign=i===0?'left':i===data.length-1?'right':'center';if(labels[i])ctx.fillText(labels[i],toX(i),H-2);});}
 
-function buildSleepBars(sleep){const el=document.getElementById('sleep-bars');if(!el)return;el.innerHTML=sleep.map(s=>{const d=new Date(s.date).toLocaleDateString('en-GB',{day:'numeric',month:'short'});const deep=s.deep||0,rem=s.rem||0,core=s.core||0;const mx=9;const dc=deep>=1.5?'var(--green)':deep>=1.0?'var(--yellow)':'var(--red)';return`<div class="sleep-bar-row"><div class="sb-date">${d}</div><div class="sb-track"><div class="sb-deep" style="width:${Math.round(deep/mx*100)}%"></div><div class="sb-rem" style="width:${Math.round(rem/mx*100)}%"></div><div class="sb-core" style="width:${Math.round(core/mx*100)}%"></div></div><div class="sb-val" style="color:${dc}">${deep.toFixed(2)}h</div></div>`;}).join('');}
+function buildSleepBars(sleep){const el=document.getElementById('sleep-bars');if(!el)return;el.innerHTML=sleep.map(s=>{const d=safeDate(s.date).toLocaleDateString('en-GB',{day:'numeric',month:'short'});const deep=s.deep||0,rem=s.rem||0,core=s.core||0;const mx=9;const dc=deep>=1.5?'var(--green)':deep>=1.0?'var(--yellow)':'var(--red)';return`<div class="sleep-bar-row"><div class="sb-date">${d}</div><div class="sb-track"><div class="sb-deep" style="width:${Math.round(deep/mx*100)}%"></div><div class="sb-rem" style="width:${Math.round(rem/mx*100)}%"></div><div class="sb-core" style="width:${Math.round(core/mx*100)}%"></div></div><div class="sb-val" style="color:${dc}">${deep.toFixed(2)}h</div></div>`;}).join('');}
 
-function drawStrengthChart(id,history,currentKg){const canvas=document.getElementById(id);if(!canvas)return;const dpr=window.devicePixelRatio||1,W=canvas.parentElement.offsetWidth,H=66;canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+'px';canvas.style.height=H+'px';const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);let pts=[...history];if(!pts.find(p=>p.date===TODAY)&&currentKg>0)pts.push({date:TODAY,kg:currentKg,projected:true});const data=pts.filter(p=>p.kg>0);if(data.length<2){ctx.fillStyle='#2a2a2a';ctx.font='9px DM Mono';ctx.textAlign='center';ctx.fillText(data.length===1?'1 session logged — keep going':'Log sessions to track',W/2,H/2);return;}const pad={l:4,r:4,t:10,b:16};const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;const vals=data.map(p=>p.kg);const mn=Math.min(...vals)-1,mx=Math.max(...vals)+1,rng=mx-mn||1;const toX=i=>pad.l+i*(cW/(data.length-1)),toY=v=>pad.t+cH-((v-mn)/rng)*cH;ctx.beginPath();data.forEach((p,i)=>i===0?ctx.moveTo(toX(i),toY(p.kg)):ctx.lineTo(toX(i),toY(p.kg)));ctx.lineTo(toX(data.length-1),pad.t+cH);ctx.lineTo(toX(0),pad.t+cH);ctx.closePath();ctx.fillStyle='rgba(255,255,255,0.04)';ctx.fill();ctx.beginPath();data.forEach((p,i)=>i===0?ctx.moveTo(toX(i),toY(p.kg)):ctx.lineTo(toX(i),toY(p.kg)));ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.stroke();const pr=Math.max(...vals);data.forEach((p,i)=>{ctx.beginPath();ctx.arc(toX(i),toY(p.kg),i===data.length-1?4:2.5,0,Math.PI*2);ctx.fillStyle=p.kg===pr?'#fbbf24':p.projected?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.6)';ctx.fill();});const pri=data.findIndex(p=>p.kg===pr);if(pri>=0){ctx.fillStyle='#fbbf24';ctx.font='8px DM Mono';ctx.textAlign='center';ctx.fillText(pr+' kg',toX(pri),toY(pr)-6);}ctx.fillStyle='#333';ctx.font='8px DM Mono';[0,data.length-1].forEach(i=>{ctx.textAlign=i===0?'left':'right';const d=new Date(data[i].date).toLocaleDateString('en-GB',{day:'numeric',month:'short'});ctx.fillText(d,toX(i),H-2);});}
+function drawStrengthChart(id,history,currentKg){const canvas=document.getElementById(id);if(!canvas)return;const dpr=window.devicePixelRatio||1,W=canvas.parentElement.offsetWidth,H=66;canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+'px';canvas.style.height=H+'px';const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);let pts=[...history];if(!pts.find(p=>p.date===TODAY)&&currentKg>0)pts.push({date:TODAY,kg:currentKg,projected:true});const data=pts.filter(p=>p.kg>0);if(data.length<2){ctx.fillStyle='#2a2a2a';ctx.font='9px DM Mono';ctx.textAlign='center';ctx.fillText(data.length===1?'1 session logged — keep going':'Log sessions to track',W/2,H/2);return;}const pad={l:4,r:4,t:10,b:16};const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;const vals=data.map(p=>p.kg);const mn=Math.min(...vals)-1,mx=Math.max(...vals)+1,rng=mx-mn||1;const toX=i=>pad.l+i*(cW/(data.length-1)),toY=v=>pad.t+cH-((v-mn)/rng)*cH;ctx.beginPath();data.forEach((p,i)=>i===0?ctx.moveTo(toX(i),toY(p.kg)):ctx.lineTo(toX(i),toY(p.kg)));ctx.lineTo(toX(data.length-1),pad.t+cH);ctx.lineTo(toX(0),pad.t+cH);ctx.closePath();ctx.fillStyle='rgba(255,255,255,0.04)';ctx.fill();ctx.beginPath();data.forEach((p,i)=>i===0?ctx.moveTo(toX(i),toY(p.kg)):ctx.lineTo(toX(i),toY(p.kg)));ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.stroke();const pr=Math.max(...vals);data.forEach((p,i)=>{ctx.beginPath();ctx.arc(toX(i),toY(p.kg),i===data.length-1?4:2.5,0,Math.PI*2);ctx.fillStyle=p.kg===pr?'#fbbf24':p.projected?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.6)';ctx.fill();});const pri=data.findIndex(p=>p.kg===pr);if(pri>=0){ctx.fillStyle='#fbbf24';ctx.font='8px DM Mono';ctx.textAlign='center';ctx.fillText(pr+' kg',toX(pri),toY(pr)-6);}ctx.fillStyle='#333';ctx.font='8px DM Mono';[0,data.length-1].forEach(i=>{ctx.textAlign=i===0?'left':'right';const dl=safeDate(data[i].date).toLocaleDateString('en-GB',{day:'numeric',month:'short'});ctx.fillText(dl,toX(i),H-2);});}
 
 function drawBlMini(id,data,color){const canvas=document.getElementById(id);if(!canvas||data.length<2)return;const dpr=window.devicePixelRatio||1,W=canvas.parentElement.offsetWidth,H=30;canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+'px';canvas.style.height=H+'px';const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);const vals=data.map(d=>d.val).filter(v=>v>0);if(vals.length<2)return;const mn=Math.min(...vals)*0.97,mx=Math.max(...vals)*1.03,rng=mx-mn||1;const step=W/(vals.length-1);const toX=i=>i*step,toY=v=>H-3-((v-mn)/rng)*(H-6);ctx.beginPath();vals.forEach((v,i)=>i===0?ctx.moveTo(toX(i),toY(v)):ctx.lineTo(toX(i),toY(v)));ctx.lineTo(toX(vals.length-1),H);ctx.lineTo(0,H);ctx.closePath();ctx.fillStyle='rgba(255,255,255,0.04)';ctx.fill();ctx.beginPath();vals.forEach((v,i)=>i===0?ctx.moveTo(toX(i),toY(v)):ctx.lineTo(toX(i),toY(v)));ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.stroke();}
 
@@ -1439,6 +1664,219 @@ let toastT;
 function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('show'),2200);}
 
 // ════════════════════════════════════
+// WORKOUT MODE
+// ════════════════════════════════════
+let wmState = {
+  exercises: [],   // [{exId, name, note, sets, kg, bw}]
+  exIdx: 0,        // current exercise index
+  setIdx: 0,       // current set index
+  kg: 0,
+  reps: 10,
+  log: {},         // { exId: [{kg, reps, done}] }
+  timerInt: null,
+};
+
+function openWorkoutMode() {
+  const sess = SESSIONS[currentSessType];
+  if (!sess) return;
+  const prev = DB.get('prev_weights') || {};
+  const exIds = getSessionExercises(currentSessType, currentPhase, currentHrv);
+  const addSet = currentHrv >= 40;
+  const reduceLoad = currentHrv && currentHrv < 32;
+
+  wmState.exercises = exIds.map(id => {
+    const ex = EX_DB[id];
+    if (!ex) return null;
+    let sets = ex.sets[currentPhase] || ex.sets[1];
+    if (addSet) sets += 1;
+    if (reduceLoad) sets = Math.max(2, sets - 1);
+    const kg = prev[id] || ex.kg;
+    return { exId: id, name: ex.name, note: ex.note, sets, reps: parseInt(ex.reps[currentPhase]||ex.reps[1])||10, kg, bw: ex.bw };
+  }).filter(Boolean);
+
+  wmState.exIdx = 0;
+  wmState.setIdx = 0;
+  wmState.log = {};
+  wmState.exercises.forEach(ex => { wmState.log[ex.exId] = []; });
+
+  document.getElementById('wm-session-label').textContent = SESSION_TEMPLATES[currentSessType]?.name || 'Training';
+  document.getElementById('workout-modal').classList.add('open');
+  wmRender();
+}
+
+function wmRender() {
+  const ex = wmState.exercises[wmState.exIdx];
+  if (!ex) return;
+
+  // Progress dots
+  const dots = wmState.exercises.map((e, i) => {
+    const cls = i < wmState.exIdx ? 'done' : i === wmState.exIdx ? 'active' : '';
+    return `<div class="wm-prog-dot ${cls}"></div>`;
+  }).join('');
+  document.getElementById('wm-progress').innerHTML = dots;
+
+  // Exercise info
+  document.getElementById('wm-ex-name').textContent = ex.name;
+  document.getElementById('wm-set-counter').textContent = `Set ${wmState.setIdx + 1} of ${ex.sets}`;
+  document.getElementById('wm-ex-note').textContent = ex.note;
+
+  // Weight/reps
+  const kgLabel = document.getElementById('wm-kg-label');
+  const kgVal = document.getElementById('wm-kg-val');
+  const kgUnit = document.getElementById('wm-kg-unit');
+
+  if (ex.bw) {
+    kgLabel.textContent = 'Weight';
+    kgVal.textContent = 'BW';
+    kgUnit.textContent = 'bodyweight';
+    wmState.kg = 0;
+  } else {
+    kgLabel.textContent = 'Weight';
+    kgVal.textContent = wmState.kg || ex.kg;
+    kgUnit.textContent = 'kg';
+    if (wmState.setIdx === 0 && wmState.log[ex.exId].length === 0) wmState.kg = ex.kg;
+  }
+
+  document.getElementById('wm-reps-val').textContent = wmState.reps || ex.reps;
+  if (wmState.setIdx === 0 && wmState.log[ex.exId].length === 0) wmState.reps = ex.reps;
+
+  // Done button label
+  const isLastSet = wmState.setIdx >= ex.sets - 1;
+  const isLastEx = wmState.exIdx >= wmState.exercises.length - 1;
+  const doneBtn = document.getElementById('wm-done-btn');
+  doneBtn.className = 'wm-done-btn' + (isLastSet && isLastEx ? ' last' : '');
+  doneBtn.textContent = isLastSet && isLastEx ? 'Finish workout ✓' : isLastSet ? 'Next exercise →' : 'Set done ✓';
+
+  // Prev button
+  document.getElementById('wm-prev-btn').style.display = (wmState.exIdx > 0 || wmState.setIdx > 0) ? '' : 'none';
+
+  // Hide rest timer
+  document.getElementById('wm-rest').classList.remove('show');
+}
+
+function adjustVal(field, delta) {
+  if (field === 'kg') {
+    wmState.kg = Math.max(0, +(wmState.kg + delta).toFixed(1));
+    const ex = wmState.exercises[wmState.exIdx];
+    if (ex && !ex.bw) document.getElementById('wm-kg-val').textContent = wmState.kg;
+  } else {
+    wmState.reps = Math.max(1, wmState.reps + delta);
+    document.getElementById('wm-reps-val').textContent = wmState.reps;
+  }
+}
+
+function wmDoneSet() {
+  const ex = wmState.exercises[wmState.exIdx];
+  if (!ex) return;
+
+  // Log this set
+  wmState.log[ex.exId].push({ kg: wmState.kg, reps: wmState.reps, done: true });
+
+  const isLastSet = wmState.setIdx >= ex.sets - 1;
+  const isLastEx  = wmState.exIdx >= wmState.exercises.length - 1;
+
+  if (isLastSet && isLastEx) {
+    // Finish
+    wmSaveAndClose();
+    return;
+  }
+
+  if (isLastSet) {
+    // Next exercise
+    wmState.exIdx++;
+    wmState.setIdx = 0;
+    const nextEx = wmState.exercises[wmState.exIdx];
+    if (nextEx) { wmState.kg = nextEx.kg; wmState.reps = nextEx.reps; }
+    wmRender();
+    startWmTimer(false); // short rest between exercises
+  } else {
+    // Next set
+    wmState.setIdx++;
+    wmRender();
+    startWmTimer(true); // rest timer
+  }
+}
+
+function wmPrev() {
+  if (wmState.setIdx > 0) {
+    wmState.setIdx--;
+    wmState.log[wmState.exercises[wmState.exIdx].exId].pop();
+  } else if (wmState.exIdx > 0) {
+    wmState.exIdx--;
+    wmState.setIdx = wmState.exercises[wmState.exIdx].sets - 1;
+  }
+  stopWmTimer();
+  wmRender();
+}
+
+function startWmTimer(isSet) {
+  const secs = isSet ? settings.restSec : Math.min(settings.restSec, 60);
+  let rem = secs;
+  const restEl = document.getElementById('wm-rest');
+  const valEl  = document.getElementById('wm-rest-val');
+  const barEl  = document.getElementById('wm-rest-bar');
+  restEl.classList.add('show');
+  barEl.style.width = '100%';
+  barEl.style.transition = 'none';
+
+  stopWmTimer();
+  wmState.timerInt = setInterval(() => {
+    rem--;
+    const m = Math.floor(rem/60), s = rem%60;
+    valEl.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+    barEl.style.transition = 'width 1s linear';
+    barEl.style.width = (rem/secs*100) + '%';
+    if (rem <= 0) skipWmTimer();
+  }, 1000);
+}
+
+function skipWmTimer() {
+  stopWmTimer();
+  document.getElementById('wm-rest').classList.remove('show');
+}
+
+function stopWmTimer() {
+  if (wmState.timerInt) { clearInterval(wmState.timerInt); wmState.timerInt = null; }
+}
+
+function wmSaveAndClose() {
+  let log = DB.get('session_log') || [];
+  let prev = DB.get('prev_weights') || {};
+
+  // Merge wmState.log into logData format and save weights
+  Object.entries(wmState.log).forEach(([exId, sets]) => {
+    logData[exId] = sets;
+    const maxKg = Math.max(...sets.filter(s=>s.kg>0).map(s=>s.kg), 0);
+    if (maxKg > 0) prev[exId] = maxKg;
+    // Mark as done in today's checks
+    if (sets.length > 0) {
+      let checks = DB.get('today_checks') || {};
+      checks[exId] = true;
+      DB.set('today_checks', checks);
+    }
+  });
+  DB.set('prev_weights', prev);
+
+  log.push({ type: currentSessType, phase: currentPhase, date: TODAY, exercises: wmState.log, hrv: currentHrv, ts: Date.now() });
+  DB.set('session_log', log);
+  DB.del('today_checks');
+
+  stopWmTimer();
+  document.getElementById('workout-modal').classList.remove('open');
+  updateProgress();
+  document.getElementById('save-btn').classList.remove('visible');
+  toast('Workout saved ✓');
+}
+
+function closeWorkoutMode() {
+  if (Object.values(wmState.log).some(s=>s.length>0)) {
+    if (!confirm('End workout? Progress will be lost.')) return;
+  }
+  stopWmTimer();
+  document.getElementById('workout-modal').classList.remove('open');
+}
+
+// ════════════════════════════════════
 // INIT
 // ════════════════════════════════════
 function init(){
@@ -1448,7 +1886,7 @@ function init(){
   if(tc){currentHrv=tc.hrv;updateHrvDisplay(tc.hrv);buildTodayPlan(tc.hrv);}
   else{const metrics=DB.get('health_metrics');currentPhase=detectPhase(metrics);updatePhaseBanner(currentPhase,null);}
   const m=DB.get('health_metrics');if(m){updateTodayFromHealth(m);}
-  if(m){const hrv7=last7v(getByDate(m,'heart_rate_variability',7)),rhr7=last7v(getByDate(m,'resting_heart_rate',7));const cutoff7=new Date();cutoff7.setDate(cutoff7.getDate()-7);const sl7=[];(m['sleep_analysis']||[]).forEach(r=>{if(new Date((r.date||'').slice(0,10))>=cutoff7)sl7.push(r);});const deep7=sl7.slice(-7).map(s=>s.deep||0);const sc=calcScore(hrv7,rhr7,deep7,last7v(getByDate(m,'respiratory_rate',7)),last7v(getByDate(m,'breathing_disturbances',7)),last7v(getByDate(m,'step_count',7)),last7v(getByDate(m,'cardio_recovery',7)));document.getElementById('sv-score').textContent=sc.total;document.getElementById('sd-score').style.background=sc.total>=80?'var(--green)':sc.total>=60?'var(--yellow)':'var(--red)';}
+  if(m){const hrv7=last7v(getByDate(m,'heart_rate_variability',7)),rhr7=last7v(getByDate(m,'resting_heart_rate',7));const cutoff7=new Date();cutoff7.setDate(cutoff7.getDate()-7);const sl7=[];(m['sleep_analysis']||[]).forEach(r=>{if(safeDate((r.date||'').slice(0,10))>=cutoff7)sl7.push(r);});const deep7=sl7.slice(-7).map(s=>s.deep||0);const sc=calcScore(hrv7,rhr7,deep7,last7v(getByDate(m,'respiratory_rate',7)),last7v(getByDate(m,'breathing_disturbances',7)),last7v(getByDate(m,'step_count',7)),last7v(getByDate(m,'cardio_recovery',7)));document.getElementById('sv-score').textContent=sc.total;document.getElementById('sd-score').style.background=sc.total>=80?'var(--green)':sc.total>=60?'var(--yellow)':'var(--red)';}
   const ub=DB.get('health_uploaded');if(ub){document.getElementById('uc-badge').style.display='inline-block';document.getElementById('uc-badge').textContent=ub;document.getElementById('uc-icon').textContent='✓';}
   document.getElementById('toggle-timer').classList.toggle('on',settings.timerOn);
 }
