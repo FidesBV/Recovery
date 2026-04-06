@@ -1,0 +1,1802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Recovery">
+<meta name="theme-color" content="#0a0a0a">
+<title>Recovery</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #0a0a0a;
+  --bg2:     #111111;
+  --bg3:     #181818;
+  --border:  #1e1e1e;
+  --border2: #2a2a2a;
+  --text:    #e8e8e8;
+  --text2:   #666666;
+  --text3:   #333333;
+  --green:   #4ade80;
+  --yellow:  #fbbf24;
+  --red:     #f87171;
+  --blue:    #60a5fa;
+  --g-dim:   rgba(74,222,128,0.1);
+  --y-dim:   rgba(251,191,36,0.1);
+  --r-dim:   rgba(248,113,113,0.1);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 20px);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 14px;
+  overscroll-behavior: none;
+}
+
+/* ── APP SHELL ── */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ── SCREENS ── */
+.screen {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-top: calc(var(--safe-top) + 8px);
+  padding-bottom: calc(var(--safe-bot) + 72px);
+  display: none;
+  animation: fadeIn 0.2s ease;
+}
+.screen::-webkit-scrollbar { display: none; }
+.screen.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ── BOTTOM NAV ── */
+#nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 430px;
+  background: rgba(10,10,10,0.95);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding-bottom: var(--safe-bot);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  z-index: 100;
+}
+.nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px 6px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--text3);
+  font-family: 'DM Mono', monospace;
+  transition: color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.nav-btn.active { color: var(--text); }
+.nav-icon { font-size: 18px; line-height: 1; }
+.nav-label { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; }
+
+/* ── TYPOGRAPHY ── */
+.page-header { padding: 12px 20px 18px; }
+.page-date { font-size: 10px; color: var(--text3); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 5px; }
+.page-title { font-family: 'Instrument Serif', serif; font-size: 28px; color: var(--text); line-height: 1.05; }
+.page-title em { font-style: italic; color: var(--text2); }
+
+.section-label {
+  font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text3); margin: 18px 20px 10px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+
+/* ── CARDS ── */
+.card {
+  margin: 0 16px 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.card-pad { padding: 16px; }
+.card-title {
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text3); margin-bottom: 14px;
+}
+
+/* ── HRV CHECKIN ── */
+.hrv-row { display: flex; align-items: flex-end; gap: 6px; margin-bottom: 6px; }
+.hrv-big { font-size: 56px; font-weight: 300; line-height: 1; letter-spacing: -0.03em; transition: color 0.3s; }
+.hrv-unit { font-size: 14px; color: var(--text2); margin-bottom: 8px; }
+.hrv-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; padding: 5px 12px; border-radius: 8px;
+  margin-bottom: 18px; transition: all 0.3s;
+}
+.hrv-rule {
+  font-size: 11px; color: var(--text2); line-height: 1.6;
+  padding: 10px 12px; background: var(--bg3); border-radius: 10px;
+  margin-bottom: 14px; min-height: 52px; transition: all 0.3s;
+}
+
+/* SLIDER */
+.slider-wrap { margin-bottom: 6px; }
+input[type=range] {
+  width: 100%; height: 4px; border-radius: 2px;
+  -webkit-appearance: none; appearance: none;
+  outline: none; cursor: pointer;
+  background: linear-gradient(to right,
+    var(--red) 0%, var(--red) 18%,
+    var(--yellow) 18%, var(--yellow) 42%,
+    var(--text3) 42%, var(--text3) 65%,
+    var(--green) 65%, var(--green) 100%);
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--text);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.6);
+}
+input[type=range]::-moz-range-thumb {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--text); border: none;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.6);
+}
+.slider-marks {
+  display: flex; justify-content: space-between;
+  font-size: 9px; color: var(--text3); margin-top: 5px;
+  padding: 0 2px;
+}
+
+/* BUTTONS */
+.btn {
+  width: 100%; border: none; border-radius: 12px;
+  padding: 14px; font-family: 'DM Mono', monospace;
+  font-size: 12px; letter-spacing: 0.06em; cursor: pointer;
+  transition: all 0.15s; -webkit-tap-highlight-color: transparent;
+}
+.btn-primary { background: var(--text); color: var(--bg); }
+.btn-primary:active { background: #ccc; }
+.btn-secondary { background: var(--bg3); color: var(--text2); border: 1px solid var(--border2); }
+.btn-secondary:active { background: var(--border2); }
+.btn-green { background: var(--green); color: #000; }
+
+/* ── STATUS STRIP ── */
+.status-strip {
+  margin: 0 16px 12px;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.stat-pill {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 8px;
+  text-align: center;
+}
+.stat-val { font-size: 20px; font-weight: 300; color: var(--text); line-height: 1; }
+.stat-lbl { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); margin-top: 4px; }
+.stat-dot { width: 5px; height: 5px; border-radius: 50%; margin: 5px auto 0; }
+
+/* ── TRAINING CARD ── */
+.training-meta {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 16px;
+}
+.training-name { font-family: 'Instrument Serif', serif; font-size: 20px; color: var(--text); }
+.training-sub { font-size: 10px; color: var(--text2); margin-top: 2px; }
+.hrv-tag {
+  font-size: 9px; padding: 4px 10px; border-radius: 6px;
+  letter-spacing: 0.06em; flex-shrink: 0;
+}
+
+/* EXERCISE ROWS */
+.ex-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 0; border-bottom: 1px solid var(--border);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.ex-row:last-child { border-bottom: none; }
+.ex-check {
+  width: 22px; height: 22px; border-radius: 7px;
+  border: 1px solid var(--border2); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: transparent; transition: all 0.2s;
+}
+.ex-row.done .ex-check {
+  background: var(--green); border-color: var(--green); color: #000;
+}
+.ex-row.done .ex-name { color: var(--text2); text-decoration: line-through; text-decoration-color: var(--text3); }
+.ex-info { flex: 1; min-width: 0; }
+.ex-name { font-size: 13px; color: var(--text); transition: color 0.2s; }
+.ex-detail { font-size: 10px; color: var(--text3); margin-top: 2px; }
+.ex-kg { font-size: 12px; color: var(--text2); flex-shrink: 0; }
+
+/* PROGRESS BAR */
+.progress-bar-wrap { margin: 14px 0 4px; }
+.progress-bar-bg { height: 3px; background: var(--border); border-radius: 2px; }
+.progress-bar-fill { height: 3px; border-radius: 2px; background: var(--green); transition: width 0.4s ease; }
+.progress-label { display: flex; justify-content: space-between; font-size: 9px; color: var(--text3); margin-top: 5px; }
+
+/* ── REST TIMER ── */
+#rest-timer {
+  position: fixed; bottom: calc(var(--safe-bot) + 72px); left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px); max-width: 400px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 14px; padding: 12px 16px;
+  display: none; z-index: 90;
+  flex-direction: column; gap: 6px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+#rest-timer.visible { display: flex; }
+.timer-row { display: flex; justify-content: space-between; align-items: center; }
+.timer-label { font-size: 9px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; }
+.timer-val { font-size: 22px; font-weight: 300; color: var(--yellow); }
+.timer-bar-bg { height: 3px; background: var(--border); border-radius: 2px; }
+.timer-bar-fill { height: 3px; border-radius: 2px; background: var(--yellow); transition: width 1s linear; }
+.timer-skip { font-size: 10px; color: var(--text3); cursor: pointer; }
+
+/* ── LOG SCREEN ── */
+.log-ex-card {
+  margin: 0 16px 10px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 16px; overflow: hidden;
+}
+.log-ex-header {
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.log-ex-title { font-size: 13px; color: var(--text); }
+.log-ex-prev { font-size: 10px; color: var(--text3); }
+.log-ex-pr { color: var(--yellow); }
+
+.set-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+}
+.set-row:last-of-type { border-bottom: none; }
+.set-num { font-size: 10px; color: var(--text3); width: 20px; flex-shrink: 0; text-align: center; }
+.set-field { flex: 1; }
+.set-field-label { font-size: 8px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+.set-input {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border2);
+  border-radius: 8px; padding: 8px; text-align: center;
+  font-family: 'DM Mono', monospace; font-size: 16px; color: var(--text);
+  outline: none; -webkit-appearance: none;
+}
+.set-input:focus { border-color: var(--border2); }
+.set-done-btn {
+  width: 32px; height: 32px; border-radius: 9px;
+  border: 1px solid var(--border2); background: var(--bg3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; cursor: pointer; color: var(--text3);
+  flex-shrink: 0; transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.set-done-btn.done { background: var(--green); border-color: var(--green); color: #000; }
+
+.add-set-row {
+  padding: 10px 16px; display: flex; align-items: center;
+  gap: 8px; color: var(--text3); font-size: 10px;
+  letter-spacing: 0.1em; cursor: pointer; border-top: 1px solid var(--border);
+}
+
+/* SESSION TOGGLE */
+.session-toggle {
+  display: flex; gap: 8px; margin: 0 16px 16px;
+}
+.sess-pill {
+  flex: 1; padding: 10px; border-radius: 10px;
+  font-family: 'DM Mono', monospace; font-size: 10px;
+  letter-spacing: 0.08em; text-align: center; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg2);
+  color: var(--text3); transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.sess-pill.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+/* ── HISTORY SCREEN ── */
+.history-day {
+  margin: 0 16px 10px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden;
+}
+.history-day-header {
+  padding: 12px 16px; display: flex;
+  justify-content: space-between; align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.history-date { font-size: 12px; color: var(--text); }
+.history-score { font-size: 11px; }
+.history-exercises { padding: 8px 16px; }
+.history-ex-row {
+  display: flex; justify-content: space-between;
+  padding: 6px 0; border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.history-ex-row:last-child { border-bottom: none; }
+.history-ex-name { color: var(--text2); }
+.history-ex-data { color: var(--text); }
+
+/* ── SETTINGS SCREEN ── */
+.settings-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-label { font-size: 12px; color: var(--text); }
+.settings-sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
+.settings-val { font-size: 12px; color: var(--text2); }
+
+/* TOGGLE */
+.toggle {
+  width: 44px; height: 26px; border-radius: 13px;
+  background: var(--border2); position: relative; cursor: pointer;
+  transition: background 0.2s; flex-shrink: 0;
+}
+.toggle.on { background: var(--green); }
+.toggle::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--text); transition: transform 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.toggle.on::after { transform: translateX(18px); }
+
+/* ALERTS / TOASTS */
+#screen-progress .sess-pill { flex-shrink: 0; }
+
+#toast {
+  position: fixed; top: calc(var(--safe-top) + 12px); left: 50%;
+  transform: translateX(-50%) translateY(-80px);
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 12px; padding: 10px 18px;
+  font-size: 12px; color: var(--text); white-space: nowrap;
+  z-index: 200; transition: transform 0.3s ease;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+#toast.show { transform: translateX(-50%) translateY(0); }
+
+/* EMPTY STATE */
+.empty-state {
+  text-align: center; padding: 40px 32px;
+  color: var(--text3); font-size: 12px; line-height: 1.8;
+}
+.empty-icon { font-size: 32px; margin-bottom: 12px; }
+
+/* CHECKIN DONE STATE */
+.checkin-done {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px; background: var(--bg3);
+  border-radius: 12px; margin-bottom: 14px;
+}
+.checkin-done-icon { font-size: 24px; }
+.checkin-done-text { font-size: 11px; color: var(--text2); line-height: 1.5; }
+.checkin-done-hrv { font-size: 20px; color: var(--text); }
+
+/* DIVIDER */
+.divider { height: 1px; background: var(--border); margin: 0 16px; }
+
+/* ── PROGRESS STYLES ── */
+.overview-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px; margin: 0 16px 14px;
+}
+.overview-stat {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 10px; text-align: center;
+}
+.overview-val { font-size: 22px; font-weight: 300; color: var(--text); line-height: 1; }
+.overview-lbl { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); margin-top: 4px; }
+
+.advice-banner {
+  margin: 0 16px 14px;
+  border-radius: 14px; padding: 14px 16px;
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.advice-banner.green { background: var(--g-dim); border: 1px solid rgba(74,222,128,0.25); }
+.advice-banner.yellow { background: var(--y-dim); border: 1px solid rgba(251,191,36,0.25); }
+.advice-banner.neutral { background: var(--bg2); border: 1px solid var(--border); }
+.advice-icon { font-size: 20px; line-height: 1; flex-shrink: 0; }
+.advice-content { flex: 1; }
+.advice-title { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 5px; }
+.advice-body { font-size: 11px; color: var(--text2); line-height: 1.6; }
+
+.prog-ex-card {
+  margin: 0 16px 12px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 16px; overflow: hidden;
+}
+.prog-ex-header {
+  padding: 14px 16px 10px;
+  display: flex; justify-content: space-between; align-items: flex-start;
+}
+.prog-ex-name { font-size: 14px; color: var(--text); margin-bottom: 2px; }
+.prog-ex-session { font-size: 9px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; }
+.pr-badge {
+  font-size: 9px; padding: 3px 8px; border-radius: 5px;
+  background: var(--y-dim); color: var(--yellow);
+  letter-spacing: 0.06em; white-space: nowrap; flex-shrink: 0;
+}
+.new-pr-badge {
+  background: rgba(74,222,128,0.15); color: var(--green);
+}
+
+.chart-container {
+  padding: 0 16px 4px;
+  position: relative; height: 90px;
+}
+.chart-container canvas { width: 100% !important; height: 90px !important; }
+
+.prog-ex-stats {
+  display: flex; gap: 0;
+  border-top: 1px solid var(--border);
+}
+.prog-stat-cell {
+  flex: 1; padding: 10px 12px; text-align: center;
+  border-right: 1px solid var(--border);
+}
+.prog-stat-cell:last-child { border-right: none; }
+.prog-stat-val { font-size: 15px; color: var(--text); font-weight: 300; }
+.prog-stat-lbl { font-size: 8px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 3px; }
+
+.prog-advice-row {
+  padding: 10px 14px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text2); line-height: 1.5;
+  background: var(--bg3);
+}
+.prog-advice-label {
+  font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text3); margin-bottom: 4px;
+}
+
+.cardio-card {
+  margin: 0 16px 12px;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 16px; overflow: hidden;
+}
+.cardio-header {
+  padding: 14px 16px 12px;
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.cardio-title { font-size: 13px; color: var(--text); }
+.cardio-sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
+.cardio-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 16px; border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.cardio-row:last-child { border-bottom: none; }
+.cardio-left { color: var(--text2); }
+.cardio-right { color: var(--text); display: flex; align-items: center; gap: 8px; }
+.zone-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+
+  margin: 0 16px 12px;
+  background: rgba(96,165,250,0.05);
+  border: 1px solid rgba(96,165,250,0.15);
+  border-radius: 14px; padding: 14px;
+  display: flex; gap: 12px; align-items: center;
+}
+.breathing-icon { font-size: 22px; }
+.breathing-text { flex: 1; }
+.breathing-title { font-size: 11px; color: #93c5fd; margin-bottom: 3px; }
+.breathing-sub { font-size: 10px; color: var(--text3); line-height: 1.5; }
+.breathing-btn {
+  font-size: 10px; color: #93c5fd; cursor: pointer;
+  background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.2);
+  border-radius: 6px; padding: 6px 10px; white-space: nowrap;
+  font-family: 'DM Mono', monospace;
+}
+
+/* BREATHING MODAL */
+#breath-modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+  z-index: 300; display: none; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 40px 24px;
+}
+#breath-modal.open { display: flex; }
+.breath-circle {
+  width: 160px; height: 160px; border-radius: 50%;
+  border: 2px solid rgba(96,165,250,0.3);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 32px; position: relative;
+}
+.breath-circle-inner {
+  width: 100px; height: 100px; border-radius: 50%;
+  background: rgba(96,165,250,0.1);
+  border: 1px solid rgba(96,165,250,0.4);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  transition: transform 4s ease-in-out;
+}
+.breath-phase { font-size: 12px; color: #93c5fd; letter-spacing: 0.1em; text-transform: uppercase; }
+.breath-count { font-size: 36px; font-weight: 300; color: var(--text); line-height: 1; }
+.breath-instruction { font-size: 13px; color: var(--text2); text-align: center; margin-bottom: 24px; line-height: 1.6; }
+.breath-progress { font-size: 11px; color: var(--text3); margin-bottom: 32px; }
+.breath-stop { font-size: 11px; color: var(--text3); cursor: pointer; padding: 10px 24px; border: 1px solid var(--border2); border-radius: 8px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ═══ SCREEN: TODAY ═══ -->
+  <div class="screen active" id="screen-today">
+
+    <div class="page-header">
+      <div class="page-date" id="today-date">—</div>
+      <div class="page-title">Good morning,<br><em>Ruben</em></div>
+    </div>
+
+    <!-- HRV CHECK-IN -->
+    <div class="card card-pad" id="checkin-card">
+      <div class="card-title">Morning Check-in</div>
+
+      <div id="checkin-input-area">
+        <div class="hrv-row">
+          <div class="hrv-big" id="hrv-display">—</div>
+          <div class="hrv-unit">ms</div>
+        </div>
+        <div class="hrv-badge" id="hrv-badge">Slide to enter HRV</div>
+        <div class="hrv-rule" id="hrv-rule">Measure HRV with your Apple Watch, then slide to your value.</div>
+        <div class="slider-wrap">
+          <input type="range" id="hrv-slider" min="15" max="65" value="15" oninput="onHrvSlide(this.value)">
+          <div class="slider-marks">
+            <span style="color:var(--red)">15</span>
+            <span>25</span>
+            <span>32</span>
+            <span>40</span>
+            <span style="color:var(--green)">65</span>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:14px" onclick="confirmCheckin()">Confirm check-in →</button>
+      </div>
+
+      <div id="checkin-done-area" style="display:none">
+        <div class="checkin-done">
+          <div class="checkin-done-icon" id="checkin-done-icon">✓</div>
+          <div>
+            <div class="checkin-done-hrv" id="checkin-done-hrv">— ms</div>
+            <div class="checkin-done-text" id="checkin-done-text">—</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary" onclick="resetCheckin()">Edit check-in</button>
+      </div>
+    </div>
+
+    <!-- VITALS STRIP -->
+    <div class="status-strip" id="vitals-strip">
+      <div class="stat-pill">
+        <div class="stat-val" id="v-hrv">—</div>
+        <div class="stat-lbl">HRV ms</div>
+        <div class="stat-dot" id="v-hrv-dot" style="background:var(--text3)"></div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-val">—</div>
+        <div class="stat-lbl">RHR bpm</div>
+        <div class="stat-dot" style="background:var(--text3)"></div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-val">—</div>
+        <div class="stat-lbl">Sleep h</div>
+        <div class="stat-dot" style="background:var(--text3)"></div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-val">—</div>
+        <div class="stat-lbl">Deep h</div>
+        <div class="stat-dot" style="background:var(--text3)"></div>
+      </div>
+    </div>
+
+    <!-- TRAINING OF THE DAY -->
+    <div class="section-label">Training today</div>
+    <div class="card card-pad" id="training-card">
+      <div class="training-meta">
+        <div>
+          <div class="training-name" id="training-name">—</div>
+          <div class="training-sub" id="training-sub">Enter HRV to unlock plan</div>
+        </div>
+        <div class="hrv-tag" id="hrv-tag" style="background:var(--bg3);color:var(--text3)">HRV?</div>
+      </div>
+
+      <div id="exercises-list"></div>
+
+      <div class="progress-bar-wrap" id="progress-wrap" style="display:none">
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+        <div class="progress-label">
+          <span id="progress-text">0 / 0 done</span>
+          <span id="progress-pct">0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BREATHING -->
+    <div class="breathing-card">
+      <div class="breathing-icon">〇</div>
+      <div class="breathing-text">
+        <div class="breathing-title">Coherent Breathing</div>
+        <div class="breathing-sub">4s in · 6s out · nasal · 10 min<br>2× per day — morning + evening</div>
+      </div>
+      <div class="breathing-btn" onclick="openBreath()">Start</div>
+    </div>
+
+    <!-- WALK REMINDER -->
+    <div class="card card-pad" style="margin-bottom:12px;">
+      <div class="card-title">Walk today</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.7;">
+        45–60 min · HR &lt;110 bpm · Zone 1–2<br>
+        <span style="color:var(--text3)">Observe pelvic posture — neutral, no forward tilt</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ SCREEN: LOG ═══ -->
+  <div class="screen" id="screen-log">
+
+    <div class="page-header">
+      <div class="page-date" id="log-date">—</div>
+      <div class="page-title">Session<br><em>log</em></div>
+    </div>
+
+    <div class="section-label">Session type</div>
+    <div class="session-toggle">
+      <div class="sess-pill active" id="pill-a" onclick="selectSession('A')">Strength A</div>
+      <div class="sess-pill" id="pill-b" onclick="selectSession('B')">Strength B</div>
+      <div class="sess-pill" id="pill-walk" onclick="selectSession('Walk')">Walk / Bike</div>
+    </div>
+
+    <div id="log-exercises"></div>
+
+    <div style="padding: 4px 16px 16px;">
+      <button class="btn btn-primary" onclick="saveSession()">Save session ✓</button>
+    </div>
+
+  </div>
+
+  <!-- ═══ SCREEN: PROGRESS ═══ -->
+  <div class="screen" id="screen-progress">
+
+    <div class="page-header">
+      <div class="page-date" id="prog-date">—</div>
+      <div class="page-title">Progress<br><em>&amp; advice</em></div>
+    </div>
+
+    <!-- OVERVIEW STATS -->
+    <div id="prog-overview"></div>
+
+    <!-- ADVICE BANNER -->
+    <div id="prog-advice-banner"></div>
+
+    <!-- FILTER PILLS -->
+    <div style="display:flex;gap:8px;margin:0 16px 16px;overflow-x:auto;scrollbar-width:none;">
+      <div class="sess-pill active" id="filter-all"   onclick="setFilter('all',this)">All</div>
+      <div class="sess-pill"        id="filter-a"     onclick="setFilter('A',this)">Strength A</div>
+      <div class="sess-pill"        id="filter-b"     onclick="setFilter('B',this)">Strength B</div>
+      <div class="sess-pill"        id="filter-cardio" onclick="setFilter('cardio',this)">Cardio</div>
+    </div>
+
+    <!-- EXERCISE CARDS -->
+    <div id="prog-exercises"></div>
+
+    <!-- SESSION HISTORY -->
+    <div class="section-label" style="margin-top:8px;">Session history</div>
+    <div id="history-content"></div>
+
+  </div>
+
+  <!-- ═══ SCREEN: SETTINGS ═══ -->
+  <div class="screen" id="screen-settings">
+
+    <div class="page-header">
+      <div class="page-date">Preferences</div>
+      <div class="page-title">Settings</div>
+    </div>
+
+    <div class="section-label">Profile</div>
+    <div class="card">
+      <div class="settings-row">
+        <div><div class="settings-label">Weight</div><div class="settings-sub">Current / goal</div></div>
+        <div class="settings-val">98 kg → 85 kg</div>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-label">Height</div></div>
+        <div class="settings-val">190 cm</div>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-label">Age</div></div>
+        <div class="settings-val">42</div>
+      </div>
+    </div>
+
+    <div class="section-label">HRV Zones</div>
+    <div class="card">
+      <div class="settings-row">
+        <div><div class="settings-label" style="color:var(--green)">≥ 40 ms</div><div class="settings-sub">Increase reps or sets</div></div>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-label">32–39 ms</div><div class="settings-sub">Maintain plan</div></div>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-label" style="color:var(--yellow)">25–31 ms</div><div class="settings-sub">Intensity −20%</div></div>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-label" style="color:var(--red)">&lt; 25 ms</div><div class="settings-sub">No training, walk only</div></div>
+      </div>
+    </div>
+
+    <div class="section-label">Rest timer</div>
+    <div class="card">
+      <div class="settings-row">
+        <div><div class="settings-label">Auto rest timer</div><div class="settings-sub">Starts after each set</div></div>
+        <div class="toggle on" id="toggle-timer" onclick="toggleTimer()"></div>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-label">Rest duration</div></div>
+        <div class="settings-val" id="rest-duration-val">90 sec</div>
+      </div>
+    </div>
+
+    <div class="section-label">Data</div>
+    <div class="card">
+      <div class="settings-row" onclick="exportData()" style="cursor:pointer">
+        <div><div class="settings-label">Export data</div><div class="settings-sub">Copy JSON to clipboard</div></div>
+        <div class="settings-val">→</div>
+      </div>
+      <div class="settings-row" onclick="clearData()" style="cursor:pointer">
+        <div><div class="settings-label" style="color:var(--red)">Clear all data</div><div class="settings-sub">Cannot be undone</div></div>
+        <div class="settings-val" style="color:var(--red)">✕</div>
+      </div>
+    </div>
+
+    <div style="padding:20px;text-align:center;font-size:9px;color:var(--text3);letter-spacing:0.1em;">
+      RECOVERY APP · PHASE 2 · BUILD 1.2<br>
+      Data stored locally on this device
+    </div>
+
+  </div>
+
+  <!-- ── BOTTOM NAV ── -->
+  <nav id="nav">
+    <button class="nav-btn active" onclick="showScreen('today', this)">
+      <span class="nav-icon">◎</span>
+      <span class="nav-label">Today</span>
+    </button>
+    <button class="nav-btn" onclick="showScreen('log', this)">
+      <span class="nav-icon">⊕</span>
+      <span class="nav-label">Log</span>
+    </button>
+    <button class="nav-btn" onclick="showScreen('progress', this)">
+      <span class="nav-icon">↗</span>
+      <span class="nav-label">Progress</span>
+    </button>
+    <button class="nav-btn" onclick="showScreen('settings', this)">
+      <span class="nav-icon">◈</span>
+      <span class="nav-label">Settings</span>
+    </button>
+  </nav>
+
+  <!-- REST TIMER -->
+  <div id="rest-timer">
+    <div class="timer-row">
+      <span class="timer-label">Rest</span>
+      <span class="timer-val" id="timer-val">1:30</span>
+      <span class="timer-skip" onclick="skipTimer()">Skip →</span>
+    </div>
+    <div class="timer-bar-bg">
+      <div class="timer-bar-fill" id="timer-bar" style="width:100%"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- BREATHING MODAL -->
+<div id="breath-modal">
+  <div style="font-size:10px;color:var(--text3);letter-spacing:0.14em;text-transform:uppercase;margin-bottom:32px;">Coherent Breathing · 10 min</div>
+  <div class="breath-circle">
+    <div class="breath-circle-inner" id="breath-circle">
+      <div class="breath-phase" id="breath-phase">inhale</div>
+      <div class="breath-count" id="breath-count">4</div>
+    </div>
+  </div>
+  <div class="breath-instruction" id="breath-instruction">Breathe in slowly<br>through your nose</div>
+  <div class="breath-progress" id="breath-progress">Cycle 1 of 60</div>
+  <div class="breath-stop" onclick="closeBreath()">Stop session</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// DATA LAYER
+// ═══════════════════════════════════════════
+const DB = {
+  get: k => { try { return JSON.parse(localStorage.getItem('rc_' + k)); } catch { return null; } },
+  set: (k, v) => localStorage.setItem('rc_' + k, JSON.stringify(v)),
+  del: k => localStorage.removeItem('rc_' + k)
+};
+
+const TODAY = new Date().toISOString().slice(0,10);
+
+// ═══════════════════════════════════════════
+// EXERCISE DEFINITIONS
+// ═══════════════════════════════════════════
+const SESSIONS = {
+  A: {
+    name: 'Strength A',
+    focus: 'Push · Legs',
+    exercises: [
+      { id: 'goblet_squat',   name: 'Goblet squat',      sets: 3, reps: 10, defaultKg: 13.5, note: 'Neutral pelvis, no forward tilt' },
+      { id: 'rdl',            name: 'Romanian deadlift',  sets: 3, reps: 10, defaultKg: 13.5, note: '3s down, feel hamstrings' },
+      { id: 'floor_press',    name: 'Floor chest press',  sets: 3, reps: 10, defaultKg: 12,   note: 'Shoulder blades retracted' },
+      { id: 'lateral_raise',  name: 'Lateral raise',      sets: 3, reps: 12, defaultKg: 2.5,  note: 'No trap shrug — stop at shoulder' },
+      { id: 'dead_bug',       name: 'Dead bug',           sets: 3, reps: 8,  defaultKg: 0,    note: 'Lower back flat on floor, slow' },
+    ]
+  },
+  B: {
+    name: 'Strength B',
+    focus: 'Pull · Core',
+    exercises: [
+      { id: 'db_row',         name: 'Dumbbell row',       sets: 3, reps: 10, defaultKg: 13.5, note: 'Elbow back, no neck compensation' },
+      { id: 'glute_bridge',   name: 'Glute bridge',       sets: 3, reps: 15, defaultKg: 0,    note: 'Pelvic floor activation' },
+      { id: 'bird_dog',       name: 'Bird dog',           sets: 3, reps: 8,  defaultKg: 0,    note: 'Slow, keep hips level' },
+      { id: 'pullup_neg',     name: 'Pull-up negative',   sets: 2, reps: 3,  defaultKg: 0,    note: '5s down — stop if neck compensates' },
+      { id: 'farmer_carry',   name: 'Farmer carry',       sets: 3, reps: 30, defaultKg: 13.5, note: '30 steps, tall posture' },
+    ]
+  }
+};
+
+// ═══════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════
+let settings = DB.get('settings') || { timerOn: true, restSec: 90 };
+function saveSettings() { DB.set('settings', settings); }
+
+// ═══════════════════════════════════════════
+// HRV LOGIC
+// ═══════════════════════════════════════════
+let currentHrv = null;
+let sliderTouched = false;
+
+function onHrvSlide(val) {
+  val = parseInt(val);
+  sliderTouched = true;
+  currentHrv = val;
+  const disp = document.getElementById('hrv-display');
+  const badge = document.getElementById('hrv-badge');
+  const rule = document.getElementById('hrv-rule');
+  disp.textContent = val;
+
+  if (val >= 40) {
+    disp.style.color = 'var(--green)';
+    badge.style.background = 'var(--g-dim)'; badge.style.color = 'var(--green)';
+    badge.textContent = '↑ Good recovery';
+    rule.textContent = 'Increase reps OR sets — not both. Stay submaximal, stop 3 reps before failure.';
+  } else if (val >= 32) {
+    disp.style.color = 'var(--text)';
+    badge.style.background = 'var(--bg3)'; badge.style.color = 'var(--text2)';
+    badge.textContent = '→ Stable';
+    rule.textContent = 'Maintain plan. Stay submaximal, stop 3 reps before failure. No intensity changes.';
+  } else if (val >= 25) {
+    disp.style.color = 'var(--yellow)';
+    badge.style.background = 'var(--y-dim)'; badge.style.color = 'var(--yellow)';
+    badge.textContent = '↓ Reduced load';
+    rule.textContent = 'Intensity −20%. Replace strength with walking + mobility if needed. Listen to your body.';
+  } else {
+    disp.style.color = 'var(--red)';
+    badge.style.background = 'var(--r-dim)'; badge.style.color = 'var(--red)';
+    badge.textContent = '✕ Rest day';
+    rule.textContent = 'No training today. Walk max 40 min at HR <105 bpm. Breathing protocol priority.';
+  }
+}
+
+function confirmCheckin() {
+  if (!sliderTouched) { toast('Slide to your HRV value first'); return; }
+  const val = currentHrv;
+
+  // Save
+  let checkins = DB.get('checkins') || {};
+  checkins[TODAY] = { hrv: val, ts: Date.now() };
+  DB.set('checkins', checkins);
+
+  // Update UI
+  document.getElementById('checkin-input-area').style.display = 'none';
+  document.getElementById('checkin-done-area').style.display = 'block';
+  document.getElementById('checkin-done-hrv').textContent = val + ' ms';
+  document.getElementById('v-hrv').textContent = val;
+
+  let icon = '✓', text = '', dotColor = '';
+  if (val >= 40) { icon = '↑'; text = 'Good recovery · Training allowed · Reps or sets +1'; dotColor = 'var(--green)'; }
+  else if (val >= 32) { icon = '→'; text = 'Stable · Maintain plan · Stay submaximal'; dotColor = 'var(--text)'; }
+  else if (val >= 25) { icon = '↓'; text = 'Low HRV · Intensity −20% · Prefer walking'; dotColor = 'var(--yellow)'; }
+  else { icon = '✕'; text = 'Rest day · Walk only <40 min · Breathing protocol'; dotColor = 'var(--red)'; }
+
+  document.getElementById('checkin-done-icon').textContent = icon;
+  document.getElementById('checkin-done-text').textContent = text;
+  document.getElementById('v-hrv-dot').style.background = dotColor;
+
+  // Build training plan
+  buildTodayPlan(val);
+  toast('Check-in saved ✓');
+}
+
+function resetCheckin() {
+  document.getElementById('checkin-input-area').style.display = 'block';
+  document.getElementById('checkin-done-area').style.display = 'none';
+}
+
+function buildTodayPlan(hrv) {
+  const nameEl = document.getElementById('training-name');
+  const subEl = document.getElementById('training-sub');
+  const tagEl = document.getElementById('hrv-tag');
+  const listEl = document.getElementById('exercises-list');
+  const progWrap = document.getElementById('progress-wrap');
+
+  // Determine which session A or B
+  const sessions = DB.get('session_log') || [];
+  const lastSession = sessions.filter(s => s.type === 'A' || s.type === 'B').pop();
+  const nextType = (!lastSession || lastSession.type === 'B') ? 'A' : 'B';
+
+  let modifiedSets = 1;
+  if (hrv >= 40) modifiedSets = 1.33; // ~+1 set
+  if (hrv < 25) { noTrainingPlan(); return; }
+
+  if (hrv >= 40) {
+    tagEl.style.background = 'var(--g-dim)'; tagEl.style.color = 'var(--green)'; tagEl.textContent = 'HRV ≥40';
+  } else if (hrv >= 32) {
+    tagEl.style.background = 'var(--bg3)'; tagEl.style.color = 'var(--text2)'; tagEl.textContent = 'HRV 32–39';
+  } else {
+    tagEl.style.background = 'var(--y-dim)'; tagEl.style.color = 'var(--yellow)'; tagEl.textContent = 'HRV 25–31';
+  }
+
+  const sess = SESSIONS[nextType];
+  nameEl.textContent = sess.name;
+  subEl.textContent = sess.focus + (hrv >= 40 ? ' · +1 set today' : hrv < 32 ? ' · −20% intensity' : '');
+
+  // Get prev weights
+  const prev = DB.get('prev_weights') || {};
+
+  listEl.innerHTML = '';
+  const checks = DB.get('today_checks') || {};
+
+  sess.exercises.forEach((ex, i) => {
+    const sets = hrv >= 40 ? ex.sets + 1 : hrv < 32 ? ex.sets : ex.sets;
+    const kg = prev[ex.id] || ex.defaultKg;
+    const isDone = checks[ex.id] || false;
+
+    const row = document.createElement('div');
+    row.className = 'ex-row' + (isDone ? ' done' : '');
+    row.onclick = () => toggleExercise(ex.id, row);
+    row.innerHTML = `
+      <div class="ex-check">${isDone ? '✓' : ''}</div>
+      <div class="ex-info">
+        <div class="ex-name">${ex.name}</div>
+        <div class="ex-detail">${sets}×${ex.reps} · ${ex.note}</div>
+      </div>
+      <div class="ex-kg">${kg > 0 ? kg + ' kg' : 'BW'}</div>
+    `;
+    listEl.appendChild(row);
+  });
+
+  progWrap.style.display = 'block';
+  updateProgress();
+}
+
+function noTrainingPlan() {
+  document.getElementById('training-name').textContent = 'Rest day';
+  document.getElementById('training-sub').textContent = 'Walk max 40 min · HR <105 · Breathing only';
+  document.getElementById('hrv-tag').style.background = 'var(--r-dim)';
+  document.getElementById('hrv-tag').style.color = 'var(--red)';
+  document.getElementById('hrv-tag').textContent = 'HRV <25';
+  document.getElementById('exercises-list').innerHTML = `
+    <div style="padding:16px 0;font-size:12px;color:var(--text2);line-height:1.8;">
+      No strength training today.<br>
+      ○ Walk 40 min · HR &lt;105 bpm<br>
+      ○ Breathing protocol 2× 10 min<br>
+      ○ Mobility / pelvic floor release
+    </div>`;
+}
+
+function toggleExercise(id, row) {
+  let checks = DB.get('today_checks') || {};
+  checks[id] = !checks[id];
+  DB.set('today_checks', checks);
+  row.classList.toggle('done');
+  row.querySelector('.ex-check').textContent = checks[id] ? '✓' : '';
+  updateProgress();
+  if (checks[id] && settings.timerOn) startTimer();
+}
+
+function updateProgress() {
+  const checks = DB.get('today_checks') || {};
+  const hrv = currentHrv;
+  if (!hrv) return;
+  const lastSession = (DB.get('session_log') || []).filter(s => s.type === 'A' || s.type === 'B').pop();
+  const nextType = (!lastSession || lastSession.type === 'B') ? 'A' : 'B';
+  const total = SESSIONS[nextType].exercises.length;
+  const done = Object.values(checks).filter(Boolean).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-text').textContent = `${done} / ${total} done`;
+  document.getElementById('progress-pct').textContent = pct + '%';
+}
+
+// ═══════════════════════════════════════════
+// LOG SCREEN
+// ═══════════════════════════════════════════
+let currentSession = 'A';
+let logData = {}; // { exId: [{kg, reps, done}] }
+
+function selectSession(type) {
+  currentSession = type;
+  ['A','B','Walk'].forEach(t => {
+    document.getElementById('pill-' + t.toLowerCase()).classList.toggle('active', t === type);
+  });
+  buildLogScreen();
+}
+
+function buildLogScreen() {
+  const container = document.getElementById('log-exercises');
+  container.innerHTML = '';
+  logData = {};
+
+  if (currentSession === 'Walk') {
+    container.innerHTML = `
+      <div class="section-label">Activity details</div>
+      <div class="card card-pad">
+        <div class="card-title">Walk / Bike / Skate</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+          <div>
+            <div class="set-field-label" style="margin-bottom:6px;">Duration (min)</div>
+            <input class="set-input" type="number" id="act-duration" placeholder="45" style="font-size:18px;">
+          </div>
+          <div>
+            <div class="set-field-label" style="margin-bottom:6px;">Avg HR (bpm)</div>
+            <input class="set-input" type="number" id="act-hr" placeholder="99" style="font-size:18px;">
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div class="set-field-label" style="margin-bottom:6px;">Activity type</div>
+          <div style="display:flex;gap:8px;">
+            <div class="sess-pill active" id="act-walk" onclick="selectActivity('walk',this)">Walk</div>
+            <div class="sess-pill" id="act-bike" onclick="selectActivity('bike',this)">Bike</div>
+            <div class="sess-pill" id="act-skate" onclick="selectActivity('skate',this)">Skate</div>
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const sess = SESSIONS[currentSession];
+  const prev = DB.get('prev_weights') || {};
+
+  document.querySelector('.section-label').textContent = sess.name + ' — ' + sess.focus;
+
+  sess.exercises.forEach(ex => {
+    const prevKg = prev[ex.id] || ex.defaultKg;
+    logData[ex.id] = [{ kg: prevKg, reps: ex.reps, done: false }];
+
+    const card = document.createElement('div');
+    card.className = 'log-ex-card';
+    card.innerHTML = `
+      <div class="log-ex-header">
+        <div class="log-ex-title">${ex.name}</div>
+        <div class="log-ex-prev">Last: <span class="log-ex-pr">${prevKg > 0 ? prevKg + ' kg' : 'BW'}</span></div>
+      </div>
+      <div id="sets-${ex.id}">
+        ${buildSetRow(ex.id, 0, prevKg, ex.reps, ex.defaultKg === 0)}
+      </div>
+      <div class="add-set-row" onclick="addSet('${ex.id}', ${ex.reps}, ${ex.defaultKg === 0})">
+        <span style="font-size:14px;color:var(--text3)">+</span> Add set
+      </div>`;
+    container.appendChild(card);
+  });
+}
+
+function buildSetRow(exId, idx, kg, reps, bw) {
+  return `<div class="set-row" id="setrow-${exId}-${idx}">
+    <div class="set-num">${idx + 1}</div>
+    <div class="set-field">
+      <div class="set-field-label">kg</div>
+      <input class="set-input" type="number" step="0.5"
+        value="${bw ? '' : kg}" placeholder="${bw ? 'BW' : ''}"
+        id="kg-${exId}-${idx}"
+        onchange="updateSetData('${exId}',${idx},'kg',this.value)"
+        style="font-size:${bw?'13px':'18px'};${bw?'color:var(--text3)':''}">
+    </div>
+    <div class="set-field">
+      <div class="set-field-label">reps</div>
+      <input class="set-input" type="number" value="${reps}"
+        id="reps-${exId}-${idx}"
+        onchange="updateSetData('${exId}',${idx},'reps',this.value)"
+        style="font-size:18px;">
+    </div>
+    <div class="set-done-btn" id="setdone-${exId}-${idx}" onclick="doneSet('${exId}',${idx})">—</div>
+  </div>`;
+}
+
+function addSet(exId, defaultReps, bw) {
+  if (!logData[exId]) logData[exId] = [];
+  const prevKg = logData[exId].length > 0 ? logData[exId][logData[exId].length-1].kg : (DB.get('prev_weights') || {})[exId] || 0;
+  const idx = logData[exId].length;
+  logData[exId].push({ kg: prevKg, reps: defaultReps, done: false });
+  const container = document.getElementById('sets-' + exId);
+  container.insertAdjacentHTML('beforeend', buildSetRow(exId, idx, prevKg, defaultReps, bw));
+}
+
+function updateSetData(exId, idx, field, val) {
+  if (!logData[exId]) return;
+  logData[exId][idx][field] = parseFloat(val) || 0;
+}
+
+function doneSet(exId, idx) {
+  if (!logData[exId]) return;
+  logData[exId][idx].done = !logData[exId][idx].done;
+  const btn = document.getElementById('setdone-' + exId + '-' + idx);
+  btn.classList.toggle('done');
+  btn.textContent = logData[exId][idx].done ? '✓' : '—';
+  if (logData[exId][idx].done && settings.timerOn) startTimer();
+}
+
+let selectedActivity = 'walk';
+function selectActivity(type, el) {
+  selectedActivity = type;
+  ['walk','bike','skate'].forEach(t => {
+    const el2 = document.getElementById('act-' + t);
+    if (el2) el2.classList.toggle('active', t === type);
+  });
+}
+
+function saveSession() {
+  let log = DB.get('session_log') || [];
+  let prev = DB.get('prev_weights') || {};
+
+  if (currentSession === 'Walk') {
+    const dur = document.getElementById('act-duration')?.value;
+    const hr = document.getElementById('act-hr')?.value;
+    log.push({ type: selectedActivity, date: TODAY, duration: dur, avgHr: hr, ts: Date.now() });
+    toast('Activity saved ✓');
+  } else {
+    // Save weights as new personal best
+    Object.entries(logData).forEach(([exId, sets]) => {
+      const maxKg = Math.max(...sets.map(s => s.kg || 0));
+      if (maxKg > 0) prev[exId] = maxKg;
+    });
+    DB.set('prev_weights', prev);
+
+    log.push({ type: currentSession, date: TODAY, exercises: logData, ts: Date.now() });
+    toast('Session saved ✓');
+  }
+
+  DB.set('session_log', log);
+
+  // Update today screen
+  const checks = DB.get('today_checks') || {};
+  Object.keys(logData).forEach(id => { checks[id] = true; });
+  DB.set('today_checks', checks);
+  updateProgress();
+}
+
+// ═══════════════════════════════════════════
+// PROGRESS SCREEN
+// ═══════════════════════════════════════════
+let activeFilter = 'all';
+let canvasCharts = {};
+
+function setFilter(filter, el) {
+  activeFilter = filter;
+  document.querySelectorAll('#screen-progress .sess-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  buildProgressScreen();
+}
+
+function buildProgressScreen() {
+  const log = DB.get('session_log') || [];
+  const checkins = DB.get('checkins') || {};
+  const todayHrv = checkins[TODAY]?.hrv || currentHrv;
+
+  // Date label
+  document.getElementById('prog-date').textContent =
+    new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // ── OVERVIEW STATS ──
+  const strengthSessions = log.filter(s => s.type === 'A' || s.type === 'B');
+  const cardioSessions   = log.filter(s => ['walk','bike','skate'].includes(s.type));
+  const uniqueDays       = new Set(log.map(s => s.date)).size;
+
+  // Total volume (kg × reps × sets)
+  let totalVolume = 0;
+  strengthSessions.forEach(sess => {
+    if (!sess.exercises) return;
+    Object.values(sess.exercises).forEach(sets => {
+      sets.forEach(s => { if (s.kg && s.reps) totalVolume += s.kg * s.reps; });
+    });
+  });
+
+  document.getElementById('prog-overview').innerHTML = `
+    <div class="overview-grid">
+      <div class="overview-stat">
+        <div class="overview-val">${strengthSessions.length}</div>
+        <div class="overview-lbl">Sessions</div>
+      </div>
+      <div class="overview-stat">
+        <div class="overview-val">${uniqueDays}</div>
+        <div class="overview-lbl">Active days</div>
+      </div>
+      <div class="overview-stat">
+        <div class="overview-val">${totalVolume > 0 ? Math.round(totalVolume / 1000) + 'k' : '—'}</div>
+        <div class="overview-lbl">Vol kg</div>
+      </div>
+    </div>`;
+
+  // ── ADVICE BANNER ──
+  buildAdviceBanner(todayHrv, strengthSessions);
+
+  // ── EXERCISE / CARDIO CARDS ──
+  const exContainer = document.getElementById('prog-exercises');
+  exContainer.innerHTML = '';
+
+  const allExercises = [...SESSIONS.A.exercises, ...SESSIONS.B.exercises];
+
+  if (activeFilter === 'cardio') {
+    buildCardioSection(exContainer, cardioSessions);
+  } else {
+    allExercises.forEach(ex => {
+      const sessType = SESSIONS.A.exercises.find(e => e.id === ex.id) ? 'A' : 'B';
+      if (activeFilter !== 'all' && activeFilter !== sessType) return;
+
+      // Collect weight history for this exercise
+      const history = [];
+      strengthSessions.forEach(sess => {
+        if (sess.exercises && sess.exercises[ex.id]) {
+          const sets = sess.exercises[ex.id].filter(s => s.kg > 0 || s.done);
+          if (sets.length > 0) {
+            const maxKg = Math.max(...sets.map(s => parseFloat(s.kg) || 0));
+            const totalReps = sets.reduce((a, s) => a + (parseInt(s.reps) || 0), 0);
+            const doneSets = sets.filter(s => s.done || s.kg > 0).length;
+            history.push({ date: sess.date, kg: maxKg, sets: doneSets, reps: Math.round(totalReps / doneSets) || ex.reps });
+          }
+        }
+      });
+
+      buildExerciseCard(exContainer, ex, sessType, history, todayHrv);
+    });
+
+    if (activeFilter === 'all') {
+      buildCardioSection(exContainer, cardioSessions);
+    }
+  }
+
+  // ── SESSION HISTORY ──
+  buildHistory();
+}
+
+function buildAdviceBanner(hrv, sessions) {
+  const banner = document.getElementById('prog-advice-banner');
+  if (!hrv) {
+    banner.innerHTML = `<div class="advice-banner neutral">
+      <div class="advice-icon">◎</div>
+      <div class="advice-content">
+        <div class="advice-title" style="color:var(--text3)">No check-in yet</div>
+        <div class="advice-body">Complete your morning HRV check-in on the Today screen to get personalised advice.</div>
+      </div></div>`;
+    return;
+  }
+
+  const lastSess = sessions[sessions.length - 1];
+  let cls = 'neutral', icon = '→', title = 'Maintain plan', body = '';
+
+  if (hrv >= 40) {
+    cls = 'green'; icon = '↑'; title = 'Good recovery — push slightly';
+    body = 'HRV ' + hrv + ' ms. Today you can add 1 set to your strongest exercise, or increase weight by 0.5–1 kg on one lift. Not both.';
+  } else if (hrv >= 32) {
+    cls = 'neutral'; icon = '→'; title = 'Stable — maintain plan';
+    body = 'HRV ' + hrv + ' ms. Stick to planned sets and weights. Stop 3 reps before failure on every exercise.';
+  } else if (hrv >= 25) {
+    cls = 'yellow'; icon = '↓'; title = 'Low HRV — reduce intensity';
+    body = 'HRV ' + hrv + ' ms. Drop weight ~20% today. Prioritise form over load. Walking instead of strength is fine.';
+  } else {
+    cls = 'yellow'; icon = '✕'; title = 'Rest day — no strength training';
+    body = 'HRV ' + hrv + ' ms. Skip strength today. Walk max 40 min at HR <105 bpm. Breathing protocol counts as training.';
+  }
+
+  banner.innerHTML = `<div class="advice-banner ${cls}">
+    <div class="advice-icon">${icon}</div>
+    <div class="advice-content">
+      <div class="advice-title" style="color:${cls==='green'?'var(--green)':cls==='yellow'?'var(--yellow)':'var(--text2)'}">${title}</div>
+      <div class="advice-body">${body}</div>
+    </div></div>`;
+}
+
+function buildExerciseCard(container, ex, sessType, history, hrv) {
+  const card = document.createElement('div');
+  card.className = 'prog-ex-card';
+
+  const prev = DB.get('prev_weights') || {};
+  const currentKg = prev[ex.id] || ex.defaultKg;
+  const startKg = history.length > 0 ? history[0].kg : ex.defaultKg;
+  const prKg = history.length > 0 ? Math.max(...history.map(h => h.kg)) : currentKg;
+  const isPR = history.length > 1 && currentKg >= prKg;
+  const totalSets = history.reduce((a, h) => a + h.sets, 0);
+  const gainKg = currentKg - startKg;
+
+  // Advice for this exercise
+  let advice = '';
+  if (hrv >= 40 && history.length >= 2) {
+    const last = history[history.length - 1];
+    if (last.sets < ex.sets + 1) advice = `Add 1 set today (${last.sets} → ${last.sets + 1}×${ex.reps}). Weight OK at ${currentKg} kg.`;
+    else advice = `Try ${currentKg + 0.5} kg today — you completed all sets last session with HRV ${hrv} ms.`;
+  } else if (hrv >= 32) {
+    advice = `Maintain ${currentKg > 0 ? currentKg + ' kg' : 'bodyweight'}, ${ex.sets}×${ex.reps}. Solid form, stop 3 reps before failure.`;
+  } else if (hrv && hrv >= 25) {
+    const reduced = Math.max(currentKg - 2.5, ex.defaultKg * 0.8);
+    advice = `Low HRV day — try ${currentKg > 0 ? reduced.toFixed(1) + ' kg' : 'bodyweight'} (−20%). Focus on technique.`;
+  } else if (!hrv) {
+    advice = 'Complete morning check-in for personalised weight advice.';
+  }
+
+  card.innerHTML = `
+    <div class="prog-ex-header">
+      <div>
+        <div class="prog-ex-name">${ex.name}</div>
+        <div class="prog-ex-session">Strength ${sessType} · ${ex.sets}×${ex.reps}</div>
+      </div>
+      ${currentKg > 0 ? `<div class="pr-badge ${isPR ? 'new-pr-badge' : ''}">PR ${prKg} kg${isPR ? ' ↑' : ''}</div>` : ''}
+    </div>
+    <div class="chart-container">
+      <canvas id="chart-${ex.id}"></canvas>
+    </div>
+    <div class="prog-ex-stats">
+      <div class="prog-stat-cell">
+        <div class="prog-stat-val">${currentKg > 0 ? currentKg + ' kg' : 'BW'}</div>
+        <div class="prog-stat-lbl">Current</div>
+      </div>
+      <div class="prog-stat-cell">
+        <div class="prog-stat-val" style="color:${gainKg > 0 ? 'var(--green)' : gainKg < 0 ? 'var(--red)' : 'var(--text)'}">
+          ${gainKg > 0 ? '+' : ''}${gainKg > 0 ? gainKg.toFixed(1) + ' kg' : gainKg < 0 ? gainKg.toFixed(1) + ' kg' : '—'}
+        </div>
+        <div class="prog-stat-lbl">Gained</div>
+      </div>
+      <div class="prog-stat-cell">
+        <div class="prog-stat-val">${totalSets}</div>
+        <div class="prog-stat-lbl">Total sets</div>
+      </div>
+    </div>
+    ${advice ? `<div class="prog-advice-row"><div class="prog-advice-label">Today's advice</div>${advice}</div>` : ''}
+  `;
+
+  container.appendChild(card);
+
+  // Draw chart after appending to DOM
+  requestAnimationFrame(() => drawExerciseChart(ex.id, history, currentKg));
+}
+
+function drawExerciseChart(exId, history, currentKg) {
+  const canvas = document.getElementById('chart-' + exId);
+  if (!canvas) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W = rect.width;
+  const H = 90;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const padL = 36, padR = 12, padT = 12, padB = 20;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+
+  // If no data — show placeholder
+  if (history.length === 0) {
+    ctx.fillStyle = '#333';
+    ctx.font = `${9 * dpr / dpr}px DM Mono`;
+    ctx.textAlign = 'center';
+    ctx.fillText('No data yet — log a session', W / 2, H / 2);
+    return;
+  }
+
+  // Data points — add today's current weight as projected point if not already logged today
+  let points = [...history];
+  const todayLogged = points.find(p => p.date === TODAY);
+  if (!todayLogged && currentKg > 0) {
+    points.push({ date: TODAY, kg: currentKg, projected: true });
+  }
+
+  const kgValues = points.map(p => p.kg).filter(v => v > 0);
+  if (kgValues.length === 0) return;
+
+  const minKg = Math.max(0, Math.min(...kgValues) - 1);
+  const maxKg = Math.max(...kgValues) + 1;
+  const range = maxKg - minKg || 1;
+
+  const xStep = points.length > 1 ? chartW / (points.length - 1) : chartW / 2;
+
+  const toX = i => padL + i * xStep;
+  const toY = kg => padT + chartH - ((kg - minKg) / range) * chartH;
+
+  // Grid lines
+  ctx.strokeStyle = '#1e1e1e';
+  ctx.lineWidth = 1;
+  [0, 0.5, 1].forEach(t => {
+    const y = padT + chartH * (1 - t);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    const label = (minKg + range * t).toFixed(1);
+    ctx.fillStyle = '#333';
+    ctx.font = '8px DM Mono';
+    ctx.textAlign = 'right';
+    ctx.fillText(label, padL - 4, y + 3);
+  });
+
+  // Area fill
+  if (points.length > 1) {
+    ctx.beginPath();
+    points.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(toX(i), toY(p.kg || minKg));
+      else ctx.lineTo(toX(i), toY(p.kg || minKg));
+    });
+    ctx.lineTo(toX(points.length - 1), padT + chartH);
+    ctx.lineTo(toX(0), padT + chartH);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fill();
+  }
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  points.forEach((p, i) => {
+    if (p.kg <= 0) return;
+    if (i === 0 || !points.slice(0, i).some(pp => pp.kg > 0)) ctx.moveTo(toX(i), toY(p.kg));
+    else ctx.lineTo(toX(i), toY(p.kg));
+  });
+  ctx.stroke();
+
+  // Dots
+  points.forEach((p, i) => {
+    if (p.kg <= 0) return;
+    const isToday = p.date === TODAY;
+    const isPR = p.kg === Math.max(...kgValues);
+    ctx.beginPath();
+    ctx.arc(toX(i), toY(p.kg), isToday ? 5 : 3, 0, Math.PI * 2);
+    ctx.fillStyle = isPR ? '#fbbf24' : isToday ? '#e8e8e8' : 'rgba(255,255,255,0.4)';
+    ctx.fill();
+
+    // Date label under first and last
+    if (i === 0 || i === points.length - 1) {
+      ctx.fillStyle = '#444';
+      ctx.font = '8px DM Mono';
+      ctx.textAlign = i === 0 ? 'left' : 'right';
+      const d = new Date(p.date);
+      const label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      ctx.fillText(label, toX(i), padT + chartH + 14);
+    }
+  });
+
+  // PR dot label
+  const prIdx = points.findIndex(p => p.kg === Math.max(...kgValues));
+  if (prIdx >= 0 && points[prIdx].kg > 0) {
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = '8px DM Mono';
+    ctx.textAlign = 'center';
+    ctx.fillText(points[prIdx].kg + ' kg', toX(prIdx), toY(points[prIdx].kg) - 8);
+  }
+}
+
+function buildCardioSection(container, cardioSessions) {
+  if (cardioSessions.length === 0 && activeFilter === 'cardio') {
+    container.innerHTML += `<div class="empty-state"><div class="empty-icon">🚴</div>No cardio logged yet.<br>Use the Log screen to add<br>a walk, bike or skate session.</div>`;
+    return;
+  }
+  if (cardioSessions.length === 0) return;
+
+  const card = document.createElement('div');
+  card.className = 'cardio-card';
+
+  const icons = { walk: '🚶', bike: '🚴', skate: '🛼' };
+  const names = { walk: 'Walk', bike: 'Bike', skate: 'Skate' };
+
+  // Stats
+  const avgHr = Math.round(cardioSessions.filter(s => s.avgHr).reduce((a, s) => a + parseFloat(s.avgHr), 0) / cardioSessions.filter(s => s.avgHr).length) || 0;
+  const totalMin = cardioSessions.filter(s => s.duration).reduce((a, s) => a + parseFloat(s.duration), 0);
+
+  card.innerHTML = `
+    <div class="cardio-header">
+      <div>
+        <div class="cardio-title">Cardio activities</div>
+        <div class="cardio-sub">${cardioSessions.length} sessions · ${Math.round(totalMin)} min total · avg HR ${avgHr || '—'} bpm</div>
+      </div>
+    </div>
+    ${cardioSessions.slice().reverse().slice(0, 5).map(s => {
+      const d = new Date(s.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      const hr = parseFloat(s.avgHr) || 0;
+      const zone = hr < 110 ? { label: 'Zone 1', color: 'var(--green)' } : hr < 130 ? { label: 'Zone 2', color: 'var(--yellow)' } : { label: 'Zone 3', color: 'var(--red)' };
+      return `<div class="cardio-row">
+        <div class="cardio-left">${icons[s.type] || '◈'} ${d}</div>
+        <div class="cardio-right">
+          <span style="color:var(--text2)">${s.duration || '—'} min</span>
+          <span>${hr || '—'} bpm</span>
+          <div class="zone-dot" style="background:${zone.color}"></div>
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+
+  container.appendChild(card);
+}
+
+// ═══════════════════════════════════════════
+// HISTORY (now inside Progress screen)
+// ═══════════════════════════════════════════
+function buildHistory() {
+  const log = DB.get('session_log') || [];
+  const el = document.getElementById('history-content');
+
+  if (log.length === 0) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">↗</div>No sessions yet.<br>Log your first session<br>to see progress here.</div>`;
+    return;
+  }
+
+  const byDate = {};
+  log.forEach(s => {
+    if (!byDate[s.date]) byDate[s.date] = [];
+    byDate[s.date].push(s);
+  });
+
+  el.innerHTML = '';
+  Object.entries(byDate).sort((a,b) => b[0].localeCompare(a[0])).forEach(([date, sessions]) => {
+    const checkins = DB.get('checkins') || {};
+    const hrv = checkins[date]?.hrv;
+    const dateStr = new Date(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+    sessions.forEach(sess => {
+      const card = document.createElement('div');
+      card.className = 'history-day';
+
+      let headerRight = '';
+      if (hrv) {
+        const c = hrv >= 40 ? 'var(--green)' : hrv >= 32 ? 'var(--text)' : hrv >= 25 ? 'var(--yellow)' : 'var(--red)';
+        headerRight = `<span style="color:${c};font-size:12px;">HRV ${hrv}</span>`;
+      }
+
+      let body = '';
+      if (sess.type === 'A' || sess.type === 'B') {
+        const sessName = SESSIONS[sess.type]?.name || sess.type;
+        body += `<div class="history-exercises">`;
+        if (sess.exercises) {
+          Object.entries(sess.exercises).forEach(([exId, sets]) => {
+            const exDef = [...SESSIONS.A.exercises, ...SESSIONS.B.exercises].find(e => e.id === exId);
+            const name = exDef?.name || exId;
+            const doneSets = sets.filter(s => s.done || s.kg > 0);
+            if (doneSets.length === 0) return;
+            const maxKg = Math.max(...doneSets.map(s => s.kg || 0));
+            const totalReps = doneSets.reduce((a, s) => a + (parseInt(s.reps) || 0), 0);
+            body += `<div class="history-ex-row">
+              <span class="history-ex-name">${name}</span>
+              <span class="history-ex-data">${doneSets.length}×${Math.round(totalReps/doneSets.length)} · ${maxKg > 0 ? maxKg + ' kg' : 'BW'}</span>
+            </div>`;
+          });
+        }
+        body += `</div>`;
+        card.innerHTML = `<div class="history-day-header"><div><div class="history-date">${dateStr}</div><div style="font-size:10px;color:var(--text3);margin-top:2px;">${sessName}</div></div>${headerRight}</div>${body}`;
+      } else {
+        const icons = { walk: '🚶', bike: '🚴', skate: '🛼' };
+        const names = { walk: 'Walk', bike: 'Bike', skate: 'Skate' };
+        card.innerHTML = `<div class="history-day-header">
+          <div><div class="history-date">${dateStr} · ${icons[sess.type] || '◈'} ${names[sess.type] || sess.type}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px;">${sess.duration || '—'} min · HR ${sess.avgHr || '—'} bpm</div></div>
+          ${headerRight}</div>`;
+      }
+
+      el.appendChild(card);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════
+// REST TIMER
+// ═══════════════════════════════════════════
+let timerInterval = null;
+let timerRemaining = 0;
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timerRemaining = settings.restSec;
+  const total = settings.restSec;
+  const timerEl = document.getElementById('rest-timer');
+  timerEl.classList.add('visible');
+
+  timerInterval = setInterval(() => {
+    timerRemaining--;
+    const m = Math.floor(timerRemaining / 60);
+    const s = timerRemaining % 60;
+    document.getElementById('timer-val').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+    document.getElementById('timer-bar').style.width = (timerRemaining / total * 100) + '%';
+    if (timerRemaining <= 0) skipTimer();
+  }, 1000);
+}
+
+function skipTimer() {
+  clearInterval(timerInterval);
+  document.getElementById('rest-timer').classList.remove('visible');
+}
+
+function toggleTimer() {
+  settings.timerOn = !settings.timerOn;
+  document.getElementById('toggle-timer').classList.toggle('on', settings.timerOn);
+  saveSettings();
+}
+
+// ═══════════════════════════════════════════
+// BREATHING
+// ═══════════════════════════════════════════
+let breathInterval = null;
+let breathCycle = 0;
+const BREATH_TOTAL = 60; // 10 min = 60 cycles of 10s
+
+function openBreath() {
+  document.getElementById('breath-modal').classList.add('open');
+  breathCycle = 0;
+  runBreathCycle();
+}
+
+function runBreathCycle() {
+  if (breathCycle >= BREATH_TOTAL) { closeBreath(); return; }
+  breathCycle++;
+
+  const circle = document.getElementById('breath-circle');
+  const phase = document.getElementById('breath-phase');
+  const count = document.getElementById('breath-count');
+  const instr = document.getElementById('breath-instruction');
+  const prog = document.getElementById('breath-progress');
+
+  prog.textContent = `Cycle ${breathCycle} of ${BREATH_TOTAL}`;
+
+  // Inhale 4s
+  phase.textContent = 'inhale'; count.textContent = '4';
+  instr.textContent = 'Breathe in slowly\nthrough your nose';
+  circle.style.transform = 'scale(1.2)';
+
+  let c = 4;
+  const countdown = setInterval(() => {
+    c--;
+    if (c > 0) count.textContent = c;
+    else {
+      clearInterval(countdown);
+      // Exhale 6s
+      phase.textContent = 'exhale'; count.textContent = '6';
+      instr.textContent = 'Breathe out slowly\nthrough your nose';
+      circle.style.transform = 'scale(1)';
+      let e = 6;
+      const exhale = setInterval(() => {
+        e--;
+        if (e > 0) count.textContent = e;
+        else { clearInterval(exhale); runBreathCycle(); }
+      }, 1000);
+    }
+  }, 1000);
+}
+
+function closeBreath() {
+  document.getElementById('breath-modal').classList.remove('open');
+  document.getElementById('breath-circle').style.transform = '';
+  toast('Breathing session complete ✓');
+}
+
+// ═══════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════
+function exportData() {
+  const data = {
+    checkins: DB.get('checkins'),
+    session_log: DB.get('session_log'),
+    prev_weights: DB.get('prev_weights')
+  };
+  navigator.clipboard?.writeText(JSON.stringify(data, null, 2))
+    .then(() => toast('Data copied to clipboard'))
+    .catch(() => toast('Could not copy — try Safari'));
+}
+
+function clearData() {
+  if (confirm('Clear all data? This cannot be undone.')) {
+    ['checkins','session_log','prev_weights','today_checks','settings'].forEach(k => DB.del(k));
+    toast('Data cleared'); location.reload();
+  }
+}
+
+// ═══════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════
+function showScreen(id, btn) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  btn.classList.add('active');
+
+  if (id === 'progress') buildProgressScreen();
+  if (id === 'log') buildLogScreen();
+  if (id === 'settings') {
+    document.getElementById('toggle-timer').classList.toggle('on', settings.timerOn);
+    document.getElementById('rest-duration-val').textContent = settings.restSec + ' sec';
+  }
+}
+
+// ═══════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════
+let toastTimeout;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+function init() {
+  // Date
+  const dateStr = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  document.getElementById('today-date').textContent = dateStr;
+  document.getElementById('log-date').textContent = dateStr;
+
+  // Restore today's check-in if done
+  const checkins = DB.get('checkins') || {};
+  const todayCheckin = checkins[TODAY];
+  if (todayCheckin) {
+    currentHrv = todayCheckin.hrv;
+    sliderTouched = true;
+    document.getElementById('hrv-slider').value = todayCheckin.hrv;
+    onHrvSlide(todayCheckin.hrv);
+    confirmCheckin();
+  }
+
+  // Session toggle — auto-detect next
+  const sessions = DB.get('session_log') || [];
+  const lastStrength = sessions.filter(s => s.type === 'A' || s.type === 'B').pop();
+  const next = (!lastStrength || lastStrength.type === 'B') ? 'A' : 'B';
+  selectSession(next);
+
+  // Settings
+  document.getElementById('toggle-timer').classList.toggle('on', settings.timerOn);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
