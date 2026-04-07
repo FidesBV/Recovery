@@ -407,6 +407,21 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'DM Mono'
 /* TOAST */
 #toast{position:fixed;top:calc(var(--safe-t) + 12px);left:50%;transform:translateX(-50%) translateY(-60px);background:var(--bg2);border:1px solid var(--line2);border-radius:10px;padding:9px 18px;font-size:12px;color:var(--t1);z-index:500;transition:transform 0.25s ease;white-space:nowrap;box-shadow:0 6px 20px rgba(0,0,0,0.5);}
 #toast.show{transform:translateX(-50%) translateY(0);}
+
+/* SKIP TRAINING */
+.skip-btn{margin:0 16px 4px;width:calc(100% - 32px);padding:11px;background:transparent;border:1px solid var(--line2);border-radius:10px;font-family:'DM Mono',monospace;font-size:11px;color:var(--t3);cursor:pointer;letter-spacing:0.06em;transition:all 0.15s;display:none;}
+.skip-btn:active{background:var(--bg2);}
+.skip-btn.visible{display:block;}
+.tomorrow-card{margin:0 16px 10px;border-radius:14px;padding:14px 16px;background:var(--bg2);border:1px solid var(--line);display:none;}
+.tomorrow-card.visible{display:block;}
+.tc-label{font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--t3);margin-bottom:6px;}
+.tc-session{font-family:'Instrument Serif',serif;font-size:18px;color:var(--t1);}
+.tc-focus{font-size:10px;color:var(--t3);margin-top:3px;}
+.skipped-banner{margin:0 16px 10px;border-radius:14px;padding:13px 16px;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.15);display:none;}
+.skipped-banner.visible{display:block;}
+.sb-top{display:flex;justify-content:space-between;align-items:center;}
+.sb-title{font-size:11px;color:#93c5fd;}
+.sb-sub{font-size:10px;color:var(--t3);margin-top:3px;line-height:1.5;}
 .empty{text-align:center;padding:48px 32px;color:var(--t3);font-size:12px;line-height:1.8;}
 </style>
 </head>
@@ -483,6 +498,19 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'DM Mono'
     </div>
   </div>
 
+    <!-- SKIP TRAINING -->
+  <button class="skip-btn" id="skip-btn" onclick="skipTraining()">Sla vandaag over →</button>
+  <div class="skipped-banner" id="skipped-banner">
+    <div class="sb-top">
+      <div><div class="sb-title">○ Vandaag overgeslagen</div><div class="sb-sub" id="sb-sub">Wandelen · 2× ademhaling · bekkenbodem release.</div></div>
+      <div onclick="undoSkip()" style="font-size:10px;color:var(--t3);cursor:pointer;padding:5px 8px;background:var(--bg3);border:1px solid var(--line2);border-radius:6px;white-space:nowrap;flex-shrink:0;">Ongedaan ↩</div>
+    </div>
+  </div>
+  <div class="tomorrow-card" id="tomorrow-card">
+    <div class="tc-label">Morgen → geplande training</div>
+    <div class="tc-session" id="tc-session">—</div>
+    <div class="tc-focus" id="tc-focus">—</div>
+  </div>
   <button class="save-session-btn" id="save-btn" onclick="saveSession()">Save session ✓</button>
 
   <!-- REST DAY BANNER (shown when rest advised/forced) -->
@@ -754,7 +782,7 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:'DM Mono'
       <div><div class="s-label" style="color:var(--red)">Clear all data</div></div>
       <div class="s-val" style="color:var(--red)">✕</div>
     </div>
-    <div style="margin-top:16px;text-align:center;font-size:9px;color:var(--t3);letter-spacing:0.1em;">RECOVERY v2.1 · Data stored locally</div>
+    <div style="margin-top:16px;text-align:center;font-size:9px;color:var(--t3);letter-spacing:0.1em;">RECOVERY v2.2 · Data stored locally</div>
     <div style="margin-top:16px;"><button style="width:100%;padding:13px;background:var(--bg3);border:1px solid var(--line2);border-radius:10px;font-family:'DM Mono',monospace;font-size:12px;color:var(--t2);cursor:pointer;" onclick="closeSettings()">Close</button></div>
   </div>
 </div>
@@ -893,12 +921,13 @@ function detectPhase(metrics) {
 // SESSION SELECTION
 // ════════════════════════════════════
 function selectTodaySession(phase) {
-  // Rotate through push/pull/legs
+  // Rotate: skipped days replay the same session (rotation doesn't advance)
   const log = DB.get('session_log') || [];
-  const strengthLog = log.filter(s => ['push','pull','legs'].includes(s.type));
-  const lastType = strengthLog.length ? strengthLog[strengthLog.length-1].type : null;
+  const lastEntry = [...log].reverse().find(s => ['push','pull','legs','skipped'].includes(s.type));
+  if (!lastEntry) return 'push';
+  if (lastEntry.type === 'skipped') return lastEntry.skippedType || 'push';
   const rotation = ['push','pull','legs'];
-  const lastIdx = rotation.indexOf(lastType);
+  const lastIdx = rotation.indexOf(lastEntry.type);
   return rotation[(lastIdx + 1) % 3];
 }
 
@@ -1283,6 +1312,10 @@ function buildTodayPlan(hrv) {
   // Show workout mode button
   const swWrap = document.getElementById('start-workout-wrap');
   if (swWrap) swWrap.style.display = 'block';
+  // Show skip button unless already skipped today
+  const alreadySkipped = (DB.get('session_log')||[]).find(s=>s.type==='skipped'&&s.date===TODAY);
+  const skipBtn = document.getElementById('skip-btn');
+  if (skipBtn) skipBtn.classList.toggle('visible', !alreadySkipped);
 }
 
 function updatePhaseBanner(phase, hrv) {
@@ -2173,6 +2206,55 @@ function closeWorkoutMode() {
   document.getElementById('workout-modal').classList.remove('open');
 }
 
+
+// ════════════════════════════════════
+// SKIP TRAINING
+// ════════════════════════════════════
+function skipTraining() {
+  if (!currentSessType) return;
+  const log = DB.get('session_log') || [];
+  if (log.find(s => s.type === 'skipped' && s.date === TODAY)) { toast('Al overgeslagen vandaag'); return; }
+  log.push({ type: 'skipped', skippedType: currentSessType, date: TODAY, hrv: currentHrv, ts: Date.now() });
+  DB.set('session_log', log);
+  applySkippedUI(currentSessType);
+  const tmpl = SESSION_TEMPLATES[currentSessType];
+  toast('Overgeslagen — morgen: ' + (tmpl ? tmpl.name : currentSessType));
+}
+
+function applySkippedUI(skippedType) {
+  document.getElementById('training-card').style.opacity = '0.35';
+  const skipBtn = document.getElementById('skip-btn');
+  if (skipBtn) skipBtn.classList.remove('visible');
+  document.getElementById('save-btn').classList.remove('visible');
+  const sw = document.getElementById('start-workout-wrap');
+  if (sw) sw.style.display = 'none';
+  const sr = document.getElementById('save-rest-wrap');
+  if (sr) sr.style.display = 'none';
+  document.getElementById('skipped-banner').classList.add('visible');
+  const tmpl = SESSION_TEMPLATES[skippedType];
+  if (tmpl) {
+    document.getElementById('tomorrow-card').classList.add('visible');
+    document.getElementById('tc-session').textContent = tmpl.name;
+    document.getElementById('tc-focus').textContent = tmpl.focus;
+  }
+}
+
+function undoSkip() {
+  let log = DB.get('session_log') || [];
+  log = log.filter(s => !(s.type === 'skipped' && s.date === TODAY));
+  DB.set('session_log', log);
+  document.getElementById('training-card').style.opacity = '';
+  document.getElementById('skipped-banner').classList.remove('visible');
+  document.getElementById('tomorrow-card').classList.remove('visible');
+  if (currentHrv && currentHrv >= 25) {
+    const skipBtn = document.getElementById('skip-btn');
+    if (skipBtn) skipBtn.classList.add('visible');
+    const sw = document.getElementById('start-workout-wrap');
+    if (sw) sw.style.display = 'block';
+  }
+  toast('Teruggedraaid ✓');
+}
+
 // ════════════════════════════════════
 // INIT
 // ════════════════════════════════════
@@ -2183,6 +2265,8 @@ function init(){
   if(tc){currentHrv=tc.hrv;updateHrvDisplay(tc.hrv);buildTodayPlan(tc.hrv);}
   else{const metrics=DB.get('health_metrics');currentPhase=detectPhase(metrics);updatePhaseBanner(currentPhase,null);}
   restoreWellness();
+  // Restore skip if today was already skipped
+  const todaySkip=(DB.get('session_log')||[]).find(s=>s.type==='skipped'&&s.date===TODAY);if(todaySkip){if(currentSessType)applySkippedUI(todaySkip.skippedType);}
   const m=DB.get('health_metrics');if(m){updateTodayFromHealth(m);}
   if(m){const hrv7=last7v(getByDate(m,'heart_rate_variability',7)),rhr7=last7v(getByDate(m,'resting_heart_rate',7));const cutoff7=new Date();cutoff7.setDate(cutoff7.getDate()-7);const sl7=[];(m['sleep_analysis']||[]).forEach(r=>{if(safeDate((r.date||'').slice(0,10))>=cutoff7)sl7.push(r);});const deep7=sl7.slice(-7).map(s=>s.deep||0);const sc=calcScore(hrv7,rhr7,deep7,last7v(getByDate(m,'respiratory_rate',7)),last7v(getByDate(m,'breathing_disturbances',7)),last7v(getByDate(m,'step_count',7)),last7v(getByDate(m,'cardio_recovery',7)));document.getElementById('sv-score').textContent=sc.total;document.getElementById('sd-score').style.background=sc.total>=80?'var(--green)':sc.total>=60?'var(--yellow)':'var(--red)';}
   const ub=DB.get('health_uploaded');if(ub){document.getElementById('uc-badge').style.display='inline-block';document.getElementById('uc-badge').textContent=ub;document.getElementById('uc-icon').textContent='✓';}
