@@ -691,10 +691,12 @@ function sessionDraft(){
   return SESS;
 }
 function saveDraft(){DB.set('draft_'+TODAY,SESS);}
+let SESS_SLOT='blk-a';
 function renderSession(slot){
-  const wrap=el(slot||'blk-a');
+  if(slot)SESS_SLOT=slot;
+  const wrap=el(SESS_SLOT);
   if(!wrap)return;
-  const lead='<div class="sec" style="margin-top:'+(slot==='blk-a'?'6px':'22px')+'">'+
+  const lead='<div class="sec" style="margin-top:'+(SESS_SLOT==='blk-a'?'6px':'22px')+'">'+
     (S.verdict.k==='rest'?"Today's session":'Strength session')+'</div>';
   if(doneToday()){
     const s=sessions().filter(x=>x.date===TODAY).pop();
@@ -718,6 +720,7 @@ function renderSession(slot){
   const items=!open?'':d.ids.map(id=>{
     const e=EX_DB[id];if(!e)return '';
     const t=targetFor(id),hint=progressionHint(id);
+    const secs=parseInt((String(t.reps).match(/^([0-9]+)s/)||[])[1]||'0',10);
     const sets=[];
     for(let i=0;i<t.sets;i++){
       const on=d.marks[id]&&d.marks[id][i];
@@ -728,13 +731,14 @@ function renderSession(slot){
       '<div class="ex-target">'+t.sets+' \u00D7 '+h(t.reps)+'</div></div>'+
       '<div class="ex-note">'+h(e.note||'')+'</div>'+
       (hint?'<div class="ex-hint">\u2191 '+h(hint)+'</div>':'')+
+      (secs?'<button class="btn btn-quiet" style="width:100%;margin:9px 0 0" onclick="runHold(\''+id+'\','+secs+')">Start '+secs+'s hold</button>':'')+
       '<div class="sets">'+sets.join('')+'</div></div>';
   }).join('');
 
   const summary=d.ids.map(id=>EX_DB[id]?EX_DB[id].name:'').filter(Boolean).join(', ');
 
   wrap.innerHTML=lead+'<div class="card">'+
-    '<div class="row" style="margin-bottom:'+(open?'10px':'0')+'"><div style="font-size:14px;text-transform:capitalize">'+h(d.type)+' day</div>'+
+    '<div class="row" style="cursor:pointer;margin-bottom:'+(open?'10px':'0')+'" onclick="toggleSess()"><div style="font-size:14px;text-transform:capitalize">'+h(d.type)+' day</div>'+
     '<div class="muted">'+d.ids.length+' exercises \u00B7 '+doneSets+'/'+totalSets+' sets</div></div>'+
     (open?'<div class="modes">'+ROTATION.map(t=>'<button class="'+(t===d.type?'on':'')+'" onclick="setType(\''+t+'\')">'+t+'</button>').join('')+'</div>'+items
         :'<div class="muted" style="margin-top:7px;line-height:1.6">'+h(summary)+'</div>')+
@@ -754,6 +758,34 @@ function markSet(id,i){
   saveDraft();
   if(d.marks[id][i])startRest();
   renderSession();
+}
+/* Timed exercises (planks, holds, carries) get their own countdown. */
+function runHold(id,secs){
+  const e=EX_DB[id];
+  scheduleAlarm(secs);keepAwake(true);
+  openSheet('<div style="padding:0 20px 24px;text-align:center">'+
+    '<div class="muted" style="letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px">Hold</div>'+
+    '<div style="font-size:17px;margin-bottom:4px">'+h(e.name)+'</div>'+
+    '<div class="muted" style="margin-bottom:10px">'+h(e.note||'')+'</div>'+
+    '<div class="clock" id="hold-clock" style="font-size:58px">'+fmt(secs)+'</div>'+
+    '<button class="btn btn-go" style="width:100%;margin:12px 0 0" onclick="endHold(true)">Done \u2713</button>'+
+    '<button class="btn btn-quiet" style="width:100%;margin:6px 0 0" onclick="endHold(false)">Cancel</button></div>');
+  window._holdId=id;
+  clearInterval(window._hold);
+  window._hold=setInterval(()=>{
+    const left=Math.max(0,Math.round((deadline-Date.now())/1000));
+    const c=el('hold-clock');if(c)c.textContent=fmt(left);
+    if(left<=0){clearInterval(window._hold);if(c)c.textContent='0:00';}
+  },250);
+}
+function endHold(done){
+  clearInterval(window._hold);cancelAlarm();keepAwake(false);closeSheet();
+  if(!done)return;
+  const id=window._holdId,d=sessionDraft();
+  d.marks[id]=d.marks[id]||{};
+  const t=targetFor(id);
+  for(let i=0;i<t.sets;i++){if(!d.marks[id][i]){d.marks[id][i]=true;break;}}
+  saveDraft();renderSession();startRest();
 }
 function startRest(){
   const sec=(DB.get('settings')||{restSec:90}).restSec||90;
@@ -801,10 +833,12 @@ function logRest(){
 function overrideRest(){DB.set('override_rest_'+TODAY,true);S.verdict.k='ease';S.verdict.plan=PLANS.ease;renderSession();toast('Training anyway — one set less');}
 /* ═══ 18. AEROBIC UI ═══ */
 let aeroMode='stepup',aeroLeft=0,aeroTimer=null,aeroRunning=false,ropeSet=1,ropePhase='work';
+let AERO_SLOT='blk-b';
 function renderAerobic(slot){
-  const wrap=el(slot||'blk-b');
+  if(slot)AERO_SLOT=slot;
+  const wrap=el(AERO_SLOT);
   if(!wrap)return;
-  const lead='<div class="sec" style="margin-top:'+(slot==='blk-a'?'6px':'22px')+'">Aerobic block</div>';
+  const lead='<div class="sec" style="margin-top:'+(AERO_SLOT==='blk-a'?'6px':'22px')+'">Aerobic block</div>';
   const count=aeroThisWeek().length;
   const done=aeroLog().some(e=>e.date===TODAY);
   const T=aeroTarget();
