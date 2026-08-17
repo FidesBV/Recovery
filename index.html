@@ -148,6 +148,12 @@ nav b{display:block;font-size:15px;margin-bottom:3px;font-weight:400;}
 .g-name{font-family:'Instrument Serif',serif;font-size:34px;line-height:1.15;margin:10px 0 8px;}
 .g-note{font-size:13px;color:var(--t2);line-height:1.6;max-width:330px;margin:0 auto;}
 .g-target{font-size:15px;color:var(--t1);margin-top:14px;}
+.g-adj{display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap;}
+.g-field{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:9px 10px;min-width:136px;}
+.g-field .l{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:5px;}
+.g-field .c{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.g-field button{width:34px;height:34px;border-radius:9px;border:1px solid var(--line2);background:var(--bg3);color:var(--t2);font-size:17px;cursor:pointer;}
+.g-field b{font-family:'Instrument Serif',serif;font-size:22px;font-weight:400;min-width:56px;}
 .g-clock{font-family:'Instrument Serif',serif;font-size:76px;line-height:1;margin-top:14px;letter-spacing:-.02em;}
 .g-btns{display:flex;flex-direction:column;gap:8px;}
 .g-main{width:100%;padding:22px;border-radius:14px;border:1px solid rgba(74,222,128,.35);background:var(--gd);
@@ -618,12 +624,18 @@ function tone(c,f,at,dur,vol){
 }
 const CHIME=[[800,0,.16],[1000,.22,.16],[1250,.44,.30]];
 function scheduleAlarm(secs){
-  cancelAlarm();const c=getCtx();if(!c)return;
+  cancelAlarm();
+  deadline=Date.now()+secs*1000;
+  const c=getCtx();
+  if(!c||c.state!=='running')return false;   // suspended clock never fires
   const base=c.currentTime+Math.max(0,secs);
   CHIME.forEach(([f,o,d])=>scheduled.push(tone(c,f,base+o,d,.32)));
-  deadline=Date.now()+secs*1000;
+  return true;
 }
 function cancelAlarm(){scheduled.forEach(o=>{try{o.stop();}catch(e){}});scheduled=[];deadline=0;}
+/* Timer ran out on its own: drop our handle but let the sound play. */
+function releaseAlarm(){scheduled=[];deadline=0;}
+function alarmScheduled(){return scheduled.length>0;}
 function beepNow(){
   const c=getCtx();if(!c)return;
   const go=()=>{const t=c.currentTime;CHIME.forEach(([f,o,d])=>tone(c,f,t+o,d,.32));};
@@ -731,6 +743,34 @@ function sessionDraft(){
   return SESS;
 }
 function saveDraft(){DB.set('draft_'+TODAY,SESS);}
+/* What you actually did, per set. Seeded from the target, then yours. */
+function actual(id,setIdx){
+  const d=sessionDraft();
+  d.actuals=d.actuals||{};
+  d.actuals[id]=d.actuals[id]||{};
+  if(!d.actuals[id][setIdx]){
+    const t=targetFor(id),str=String(t.reps);
+    const secs=parseInt((str.match(/^([0-9]+)s/)||[])[1]||'0',10);
+    const m=str.match(/([0-9]+)\s*(?:steps)?\s*$/);
+    d.actuals[id][setIdx]={kg:t.kg||0,reps:secs||(m?parseInt(m[1],10):0),timed:!!secs};
+  }
+  return d.actuals[id][setIdx];
+}
+function field(label,key,val,unit){
+  return '<div class="g-field"><div class="l">'+label+'</div><div class="c">'+
+    '<button onclick="guideAdj(\''+key+'\',-1)">\u2212</button>'+
+    '<b>'+val+(unit?'<span style="font-size:11px;color:var(--t3)"> '+unit+'</span>':'')+'</b>'+
+    '<button onclick="guideAdj(\''+key+'\',1)">+</button></div></div>';
+}
+function guideAdj(key,dir){
+  const s=G.plan[G.i];if(!s||s.kind!=='work')return;
+  const a=actual(s.id,s.set-1);
+  if(key==='kg')a.kg=Math.max(0,+(a.kg+dir*0.5).toFixed(1));
+  else a.reps=Math.max(0,a.reps+dir*(a.timed?5:1));
+  saveDraft();
+  if(G.running){clearInterval(G.timer);G.running=false;cancelAlarm();}
+  G.left=0;guideShow();
+}
 let SESS_SLOT='blk-a';
 function renderSession(slot){
   if(slot)SESS_SLOT=slot;
@@ -848,30 +888,37 @@ function guideShow(){
   el('g-phase').textContent='Set '+s.set+' of '+s.sets;el('g-phase').className='g-phase';
   el('g-name').textContent=e.name;
   el('g-note').textContent=e.note||'';
-  el('g-target').textContent=s.target;
-  if(s.secs){G.left=s.secs;el('g-clock').textContent=fmt(G.left);el('g-main').textContent='Start '+s.secs+'s';}
+  const a=actual(s.id,s.set-1);
+  const unit=a.timed?'Seconds':(/steps/.test(String(s.target))?'Steps':'Reps');
+  el('g-target').innerHTML='<div class="muted">planned '+h(s.target)+'</div><div class="g-adj">'+
+    (a.kg?field('Weight','kg',a.kg.toFixed(1),'kg'):'')+field(unit,'reps',a.reps,'')+'</div>';
+  if(a.timed){G.left=a.reps;el('g-clock').textContent=fmt(G.left);el('g-main').textContent='Start '+a.reps+'s';}
   else{el('g-clock').textContent='';el('g-main').textContent='Set done \u2713';}
 }
 function guideMain(){
   const s=G.plan[G.i];
   if(!s)return;
-  const timed=(s.kind==='rest')||(s.kind==='work'&&s.secs);
+  const a=s.kind==='work'?actual(s.id,s.set-1):null;
+  const timed=(s.kind==='rest')||(s.kind==='work'&&a&&a.timed);
   if(!timed){markGuideSet(s);return guideNext();}
   if(G.running){clearInterval(G.timer);G.running=false;cancelAlarm();el('g-main').textContent='Resume';return;}
-  const secs=G.left||(s.kind==='rest'?s.sec:s.secs);
+  const secs=G.left||(s.kind==='rest'?s.sec:a.reps);
   G.left=secs;G.running=true;
-  scheduleAlarm(secs);
+  const ok=scheduleAlarm(secs);
+  const end=deadline;
   el('g-main').textContent='Pause';
   G.timer=setInterval(()=>{
-    G.left=Math.max(0,Math.round((deadline-Date.now())/1000));
+    G.left=Math.max(0,Math.ceil((end-Date.now())/1000));
     el('g-clock').textContent=fmt(G.left);
-    if(G.left<=0){
+    if(Date.now()>=end){
       clearInterval(G.timer);G.running=false;
+      if(!ok)beepNow();
       if(navigator.vibrate)navigator.vibrate([300,100,300]);
+      releaseAlarm();
       if(s.kind==='work')markGuideSet(s);
-      setTimeout(guideNext,700);
+      setTimeout(()=>guideNext(),900);
     }
-  },250);
+  },200);
 }
 function markGuideSet(s){
   const d=sessionDraft();
@@ -880,7 +927,9 @@ function markGuideSet(s){
   saveDraft();
 }
 function guideNext(manual){
-  clearInterval(G.timer);G.running=false;cancelAlarm();G.left=0;
+  clearInterval(G.timer);G.running=false;
+  if(manual)cancelAlarm();else releaseAlarm();
+  G.left=0;
   G.i++;
   if(G.i>=G.plan.length)return guideFinish();
   guideShow();
@@ -905,7 +954,8 @@ function guideExit(){
 /* Timed exercises (planks, holds, carries) get their own countdown. */
 function runHold(id,secs){
   const e=EX_DB[id];
-  scheduleAlarm(secs);keepAwake(true);
+  const ok=scheduleAlarm(secs);keepAwake(true);
+  if(!ok)setTimeout(beepNow,secs*1000);
   openSheet('<div style="padding:0 20px 24px;text-align:center">'+
     '<div class="muted" style="letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px">Hold</div>'+
     '<div style="font-size:17px;margin-bottom:4px">'+h(e.name)+'</div>'+
@@ -918,7 +968,7 @@ function runHold(id,secs){
   window._hold=setInterval(()=>{
     const left=Math.max(0,Math.round((deadline-Date.now())/1000));
     const c=el('hold-clock');if(c)c.textContent=fmt(left);
-    if(left<=0){clearInterval(window._hold);if(c)c.textContent='0:00';}
+    if(left<=0){clearInterval(window._hold);if(c)c.textContent='0:00';releaseAlarm();if(navigator.vibrate)navigator.vibrate([300,100,300]);}
   },250);
 }
 function endHold(done){
@@ -932,17 +982,24 @@ function endHold(done){
 }
 function startRest(){
   const sec=(DB.get('settings')||{restSec:90}).restSec||90;
-  scheduleAlarm(sec);keepAwake(true);
+  const ok=scheduleAlarm(sec);keepAwake(true);
   const t=el('rest-timer');if(!t)return;
-  let left=sec;
-  t.innerHTML='<div class="card"><div class="clock" id="rt">'+fmt(left)+'</div>'+
+  t.innerHTML='<div class="card"><div class="clock" id="rt">'+fmt(sec)+'</div>'+
     '<button class="btn btn-quiet" style="width:100%;margin:0" onclick="stopRest()">Skip rest</button></div>';
   clearInterval(window._rt);
+  const end=deadline;
   window._rt=setInterval(()=>{
-    left=Math.max(0,Math.round((deadline-Date.now())/1000));
+    const left=Math.max(0,Math.ceil((end-Date.now())/1000));
     const e=el('rt');if(e)e.textContent=fmt(left);
-    if(left<=0)stopRest();
-  },250);
+    if(Date.now()>=end){
+      clearInterval(window._rt);
+      if(!ok)beepNow();                 // scheduling failed: sound it now
+      if(navigator.vibrate)navigator.vibrate([300,100,300]);
+      releaseAlarm();                   // let the scheduled chime finish
+      keepAwake(false);
+      const w=el('rest-timer');if(w)w.innerHTML='';
+    }
+  },200);
 }
 function stopRest(){clearInterval(window._rt);cancelAlarm();keepAwake(false);const t=el('rest-timer');if(t)t.innerHTML='';}
 function fmt(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
@@ -951,14 +1008,22 @@ function saveSession(){
   const ex={};
   d.ids.forEach(id=>{
     const t=targetFor(id),arr=[];
-    for(let i=0;i<t.sets;i++)arr.push({done:!!(d.marks[id]&&d.marks[id][i]),reps:parseInt(String(t.reps))||0,kg:t.kg});
+    for(let i=0;i<t.sets;i++){
+      const a=(d.actuals&&d.actuals[id]&&d.actuals[id][i])||null;
+      arr.push({done:!!(d.marks[id]&&d.marks[id][i]),
+        reps:a?a.reps:(parseInt(String(t.reps))||0), kg:a?a.kg:t.kg});
+    }
     ex[id]=arr;
   });
   const log=DB.get('session_log')||[];
   log.push({date:TODAY,type:d.type,exercises:ex,phase:S.phase,hrv:S.hrv||null,ts:Date.now()});
   DB.set('session_log',log);
   const pw=DB.get('prev_weights')||{};
-  d.ids.forEach(id=>{const t=targetFor(id);if(t.kg)pw[id]=t.kg;});
+  d.ids.forEach(id=>{
+    const a=d.actuals&&d.actuals[id]&&d.actuals[id][0];
+    const kg=a&&a.kg?a.kg:targetFor(id).kg;
+    if(kg)pw[id]=kg;
+  });
   DB.set('prev_weights',pw);
   DB.del('draft_'+TODAY);SESS=null;stopRest();
   toast('Session logged');renderAll();
@@ -1056,7 +1121,7 @@ function aeroToggle(){
     }
   },1000);
 }
-function aeroDone(){clearInterval(aeroTimer);aeroRunning=false;beepNow();keepAwake(false);const s=el('ae-sub');if(s)s.textContent='complete';const b=el('ae-btn');if(b)b.textContent='Start';toast('Block complete — log it');}
+function aeroDone(){clearInterval(aeroTimer);aeroRunning=false;releaseAlarm();beepNow();keepAwake(false);const s=el('ae-sub');if(s)s.textContent='complete';const b=el('ae-btn');if(b)b.textContent='Start';toast('Block complete — log it');}
 function aeroReset(){clearInterval(aeroTimer);aeroRunning=false;aeroLeft=0;ropeSet=1;ropePhase='work';keepAwake(false);renderAerobic();}
 function aeroSave(){
   const rope=ropeProtocol();
