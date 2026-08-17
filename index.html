@@ -168,7 +168,6 @@ nav b{display:block;font-size:15px;margin-bottom:3px;font-weight:400;}
   <div class="tabs">
     <button class="on" id="pt-health" onclick="setProgTab('health')">Health</button>
     <button id="pt-body" onclick="setProgTab('body')">Body &amp; strength</button>
-    <button id="pt-insight" onclick="setProgTab('insight')">Insight</button>
   </div>
   <div id="p-body"></div>
 </div></div>
@@ -535,6 +534,22 @@ function aeroTarget(){
   const target=weeksAtFull>=6?4:weeksAtFull>=3?3:2;
   return {target,why:['HRV '+S.hrv7.toFixed(1)+' ms, resting HR '+rhr7.toFixed(1)+' · room for '+target+' this week'],locked:false};
 }
+/* Shows exactly which gate is holding the third block back. */
+function unlockPanel(T){
+  const blocks=aeroLog(),rhr7=mean(S.rhrV.slice(-7));
+  const gates=[
+    ['6 blocks logged',blocks.length>=6,blocks.length+' / 6'],
+    ['15 min or more',blocks.slice(-6).filter(b=>b.minutes>=15).length>=5,blocks.slice(-6).filter(b=>b.minutes>=15).length+' / 5 recent'],
+    ['No pelvic symptoms',!blocks.slice(-8).some(b=>b.pelvic),'last 8 blocks'],
+    ['7-day HRV 35+',S.hrv7>=35,(S.hrv7?S.hrv7.toFixed(1):'-')+' ms'],
+    ['7-day resting HR 63 or under',rhr7>0&&rhr7<=63,(rhr7?rhr7.toFixed(1):'-')+' bpm']
+  ];
+  if(!T.locked)return '<div class="muted" style="margin-top:11px;padding-top:10px;border-top:1px solid var(--line);color:var(--green)">All gates clear · extra blocks unlocked</div>';
+  return '<div style="margin-top:11px;padding-top:10px;border-top:1px solid var(--line)">'+
+    '<div class="muted" style="margin-bottom:7px">A third block a week unlocks when all of these are true:</div>'+
+    gates.map(([l,ok,v])=>'<div class="row" style="padding:3px 0"><span class="muted" style="color:'+(ok?'var(--green)':'var(--t3)')+'">'+(ok?'\u2713':'\u00B7')+' '+l+'</span>'+
+      '<span class="muted">'+v+'</span></div>').join('')+'</div>';
+}
 function extraBlockAvailable(){
   if(isAeroDay())return false;
   const t=aeroTarget();
@@ -696,14 +711,18 @@ function renderSession(slot){
     return;
   }
   const d=sessionDraft();
-  const items=d.ids.map(id=>{
+  const open=DB.get('sess_open_'+TODAY)===true;
+  const totalSets=d.ids.reduce((a,id)=>a+targetFor(id).sets,0);
+  const doneSets=d.ids.reduce((a,id)=>a+Object.values(d.marks[id]||{}).filter(Boolean).length,0);
+
+  const items=!open?'':d.ids.map(id=>{
     const e=EX_DB[id];if(!e)return '';
     const t=targetFor(id),hint=progressionHint(id);
     const sets=[];
     for(let i=0;i<t.sets;i++){
       const on=d.marks[id]&&d.marks[id][i];
       sets.push('<div class="set'+(on?' done':'')+'" onclick="markSet(\''+id+'\','+i+')">'+
-        (t.kg?t.kg+'kg':'')+(t.kg?' · ':'')+t.reps+'</div>');
+        (t.kg?t.kg+'kg':'')+(t.kg?' \u00B7 ':'')+t.reps+'</div>');
     }
     return '<div class="ex"><div class="ex-top"><div class="ex-name">'+h(e.name)+'</div>'+
       '<div class="ex-target">'+t.sets+' \u00D7 '+h(t.reps)+'</div></div>'+
@@ -711,15 +730,22 @@ function renderSession(slot){
       (hint?'<div class="ex-hint">\u2191 '+h(hint)+'</div>':'')+
       '<div class="sets">'+sets.join('')+'</div></div>';
   }).join('');
+
+  const summary=d.ids.map(id=>EX_DB[id]?EX_DB[id].name:'').filter(Boolean).join(', ');
+
   wrap.innerHTML=lead+'<div class="card">'+
-    '<div class="row" style="margin-bottom:10px"><div style="font-size:14px;text-transform:capitalize">'+h(d.type)+' day</div>'+
-    '<div class="muted">Core level '+S.core+' · '+CORE_LEVELS[S.core].label+'</div></div>'+
-    '<div class="modes">'+ROTATION.map(t=>'<button class="'+(t===d.type?'on':'')+'" onclick="setType(\''+t+'\')">'+t+'</button>').join('')+'</div>'+
-    items+'</div>'+
+    '<div class="row" style="margin-bottom:'+(open?'10px':'0')+'"><div style="font-size:14px;text-transform:capitalize">'+h(d.type)+' day</div>'+
+    '<div class="muted">'+d.ids.length+' exercises \u00B7 '+doneSets+'/'+totalSets+' sets</div></div>'+
+    (open?'<div class="modes">'+ROTATION.map(t=>'<button class="'+(t===d.type?'on':'')+'" onclick="setType(\''+t+'\')">'+t+'</button>').join('')+'</div>'+items
+        :'<div class="muted" style="margin-top:7px;line-height:1.6">'+h(summary)+'</div>')+
+    '<button class="btn btn-quiet" style="width:100%;margin:'+(open?'12px':'14px')+' 0 0" onclick="toggleSess()">'+
+      (open?'Hide details':'Show exercises')+'</button>'+
+    '</div>'+
     '<button class="btn btn-go" onclick="saveSession()">Log session \u2713</button>'+
     '<button class="btn btn-quiet" onclick="skipSession()">Skip today</button>'+
     '<div id="rest-timer"></div>';
 }
+function toggleSess(){DB.set('sess_open_'+TODAY,DB.get('sess_open_'+TODAY)!==true);renderToday();}
 function setType(t){DB.set('manual_session_type_'+TODAY,t);SESS=null;DB.del('draft_'+TODAY);renderAll();}
 function markSet(id,i){
   const d=sessionDraft();
@@ -788,7 +814,8 @@ function renderAerobic(slot){
     wrap.innerHTML=lead+'<div class="card"><div class="row">'+
       '<div><div style="font-size:12px">Next block · '+nextAeroDay()+'</div>'+
       '<div class="muted" style="margin-top:3px">'+h(reason)+'</div></div>'+
-      '<div class="muted" style="color:'+(count>=T.target?'var(--green)':'var(--t3)')+'">'+count+' / '+T.target+'</div></div></div>';
+      '<div class="muted" style="color:'+(count>=T.target?'var(--green)':'var(--t3)')+'">'+count+' / '+T.target+'</div></div>'+
+      unlockPanel(T)+'</div>';
     return;
   }
   if(done){
@@ -924,28 +951,70 @@ function logBp(){
 }
 /* ═══ 20. PROGRESS ═══ */
 let progTab='health';
-function setProgTab(t){progTab=t;['health','body','insight'].forEach(x=>el('pt-'+x).classList.toggle('on',x===t));renderProgress();}
+function setProgTab(t){progTab=t;['health','body'].forEach(x=>el('pt-'+x).classList.toggle('on',x===t));renderProgress();}
+let progRange=90;
+function setRange(n){progRange=n;renderProgress();}
+function rangeBar(){
+  return '<div class="tabs" style="margin:0 16px 12px">'+
+    [[30,'30 days'],[90,'3 months'],[365,'All']].map(([n,l])=>
+      '<button class="'+(progRange===n?'on':'')+'" onclick="setRange('+n+')">'+l+'</button>').join('')+'</div>';
+}
+function monthlyTable(){
+  const m={};
+  const add=(key,name,dec)=>{
+    metricSeries(name,400).forEach(([d,v])=>{
+      const k=d.slice(0,7);
+      (m[k]=m[k]||{})[key]=(m[k][key]||[]).concat(v);
+    });
+  };
+  add('hrv','heart_rate_variability');add('rhr','resting_heart_rate');add('vo2','vo2_max');
+  (DB.get('weight_log')||[]).forEach(r=>{const k=r.date.slice(0,7);(m[k]=m[k]||{});(m[k].wt=m[k].wt||[]).push(r.kg);});
+  const keys=Object.keys(m).sort().slice(-8);
+  if(keys.length<2)return '<div class="card"><div class="muted">Long-term view builds up as months pass.</div></div>';
+  const cell=(a,dec)=>a&&a.length?mean(a).toFixed(dec):'\u2013';
+  return '<div class="card" style="padding:12px 14px">'+
+    '<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)">'+
+      '<span class="muted" style="flex:1.2">Month</span><span class="muted" style="flex:1;text-align:right">HRV</span>'+
+      '<span class="muted" style="flex:1;text-align:right">Rest HR</span><span class="muted" style="flex:1;text-align:right">VO2</span>'+
+      '<span class="muted" style="flex:1;text-align:right">Weight</span></div>'+
+    keys.map(k=>'<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)">'+
+      '<span style="flex:1.2;font-size:11px">'+k+'</span>'+
+      '<span style="flex:1;text-align:right;font-size:11px">'+cell(m[k].hrv,1)+'</span>'+
+      '<span style="flex:1;text-align:right;font-size:11px">'+cell(m[k].rhr,0)+'</span>'+
+      '<span style="flex:1;text-align:right;font-size:11px">'+cell(m[k].vo2,1)+'</span>'+
+      '<span style="flex:1;text-align:right;font-size:11px">'+cell(m[k].wt,1)+'</span></div>').join('')+
+    '</div>';
+}
 function metricCard(name,cur,unit,data,better,dec){
   if(!data.length)return '<div class="metric"><div class="m-name">'+name+'</div><div class="muted" style="margin-top:6px">No data yet</div></div>';
   const first=data[0],diff=cur-first;
   const good=better==='down'?diff<0:diff>0;
   const col=Math.abs(diff)<(dec?0.3:0.5)?'#9A9AA5':good?'#4ADE80':'#F87171';
   const id='c-'+name.replace(/\W/g,'');
-  setTimeout(()=>{const c=el(id);if(c)c.dataset.h=46;sparkline(id,data,col);},0);
+  const mn=Math.min(...data),mx=Math.max(...data);
+  const half=Math.floor(data.length/2);
+  const trend=mean(data.slice(half))-mean(data.slice(0,half));
+  setTimeout(()=>{const c=el(id);if(c)c.dataset.h=72;sparkline(id,data,col);},0);
   return '<div class="metric"><div class="m-top">'+
     '<div><div class="m-name">'+name+'</div><div class="m-val">'+cur.toFixed(dec||0)+'<span class="hero-unit">'+unit+'</span></div></div>'+
     '<div><div class="m-delta" style="color:'+col+'">'+(diff>0?'+':'')+diff.toFixed(dec||1)+'</div>'+
-    '<div class="m-since">'+data.length+' readings</div></div></div>'+
-    '<canvas id="'+id+'" style="height:46px;margin-top:10px"></canvas></div>';
+    '<div class="m-since">over '+data.length+' readings</div></div></div>'+
+    '<canvas id="'+id+'" style="height:72px;margin-top:10px"></canvas>'+
+    '<div class="row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">'+
+      '<span class="muted">low '+mn.toFixed(dec||0)+'</span>'+
+      '<span class="muted">high '+mx.toFixed(dec||0)+'</span>'+
+      '<span class="muted">2nd half '+(trend>0?'+':'')+trend.toFixed(1)+'</span></div>'+
+    '</div>';
 }
 function renderProgress(){
   const b=el('p-body');
   if(progTab==='health'){
-    b.innerHTML=
-      metricCard('HRV',S.hrv7||0,'ms',S.hrvV.slice(-60),'up',1)+
-      metricCard('Resting HR',mean(S.rhrV.slice(-7))||0,'bpm',S.rhrV.slice(-60),'down',0)+
-      metricCard('VO2max',S.vo2||0,'',S.vo2V.slice(-60),'up',1)+
-      metricCard('Deep sleep',mean(S.deep7)||0,'h',sleepRecords().slice(-60).map(r=>r.deep||0).filter(x=>x>0),'up',2)+
+    const R=progRange;
+    b.innerHTML=rangeBar()+
+      metricCard('HRV',S.hrv7||0,'ms',vals('heart_rate_variability',R),'up',1)+
+      metricCard('Resting HR',mean(S.rhrV.slice(-7))||0,'bpm',vals('resting_heart_rate',R),'down',0)+
+      metricCard('VO2max',S.vo2||0,'',vals('vo2_max',R),'up',1)+
+      metricCard('Deep sleep',mean(S.deep7)||0,'h',sleepRecords().slice(-R).map(r=>r.deep||0).filter(x=>x>0),'up',2)+
       '<div class="sec">Recovery score</div><div class="card">'+
       '<div class="row" style="margin-bottom:12px"><div style="font-family:\'Instrument Serif\',serif;font-size:38px">'+S.score.total+'</div>'+
       '<div class="muted" style="text-align:right;max-width:60%">Weighted for what actually moves: HRV, resting HR, sleep, VO2max.</div></div>'+
@@ -953,7 +1022,13 @@ function renderProgress(){
         '<div style="margin-bottom:8px"><div class="row" style="margin-bottom:3px"><span class="muted">'+l+'</span>'+
         '<span class="muted">'+Math.round(v)+' / '+m+'</span></div>'+
         '<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+Math.round(v/m*100)+'%;background:var(--t2)"></div></div></div>').join('')+
-      '</div>';
+      '</div>'+
+      '<div class="sec">Month by month</div>'+monthlyTable()+
+      '<div class="sec">Your own correlations</div>'+renderPatterns()+
+      '<div class="sec">Looking back</div>'+buildRetrospect()+
+      '<div class="sec">Summary</div><div class="card">'+
+      '<div class="muted" style="margin-bottom:10px">Thirty days of numbers in one block, for a full analysis elsewhere.</div>'+
+      '<button class="btn" style="width:100%;margin:0" onclick="showMonthly()">Build 30-day summary</button></div>';
   } else if(progTab==='body'){
     const w=(DB.get('weight_log')||[]),bp=(DB.get('bp_log')||[]);
     b.innerHTML=
@@ -984,12 +1059,6 @@ function renderProgress(){
       '<div class="row"><span class="muted">Sessions logged</span><span>'+realSessions().length+'</span></div>'+
       '<div class="row" style="margin-top:8px"><span class="muted">Aerobic blocks</span><span>'+aeroLog().length+'</span></div>'+
       '<div class="row" style="margin-top:8px"><span class="muted">Current phase</span><span>'+PHASE_NAME[S.phase]+'</span></div></div>';
-  } else if(progTab==='insight'){
-    b.innerHTML='<div class="sec" style="margin-top:0">Your own correlations</div>'+renderPatterns()+
-      '<div class="sec">Looking back</div>'+buildRetrospect()+
-      '<div class="sec">Summary</div><div class="card">'+
-      '<div class="muted" style="margin-bottom:10px">Thirty days of numbers in one block — HRV, sleep, training, aerobic work, wellness and the correlations above.</div>'+
-      '<button class="btn" style="width:100%;margin:0" onclick="showMonthly()">Build 30-day summary</button></div>';
   }
 }
 
@@ -1033,9 +1102,10 @@ function openSettings(){
     '</div>'+
     '<div class="sec">Health data</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      '<div class="muted" style="margin-bottom:10px">Paste the HealthAutoExport JSON here to refresh metrics. Existing days are replaced, older ones kept.</div>'+
-      '<textarea id="imp" style="width:100%;height:90px;background:var(--bg3);border:1px solid var(--line);border-radius:9px;padding:10px;color:var(--t1);font-size:11px" placeholder="Paste JSON"></textarea>'+
-      '<button class="btn" style="width:100%;margin:8px 0 0" onclick="importHealth()">Import</button>'+
+      '<button class="btn btn-go" style="width:100%;margin:0 0 8px" onclick="pasteImport()">Paste health data</button>'+
+      '<label class="btn" style="width:100%;margin:0 0 8px;display:block">Choose JSON file'+
+        '<input type="file" accept=".json,application/json" style="display:none" onchange="fileImport(this)"></label>'+
+      '<button class="btn btn-quiet" style="width:100%;margin:0" onclick="manualImport()">Paste into a box instead</button>'+
       '<div class="muted" style="margin-top:10px">'+(DB.get('health_uploaded')?'Last import '+DB.get('health_uploaded'):'No import yet')+'</div>'+
     '</div>'+
     '<div class="card" style="margin:0 0 10px">'+
@@ -1050,9 +1120,28 @@ function srow(l,s,ctrl){return '<div class="srow"><div><div class="s-l">'+l+'</d
 function bumpCore(d){DB.set('core_level_manual',Math.min(5,Math.max(1,S.core+d)));derive();openSettings();renderToday();}
 function bumpRest(d){const st=DB.get('settings')||{restSec:90};st.restSec=Math.min(300,Math.max(30,(st.restSec||90)+d));DB.set('settings',st);openSettings();}
 function togglePelvic(){DB.set('pelvic_pt_done',!S.pelvic);derive();openSettings();renderToday();toast(S.pelvic?'Unlocked':'Locked');}
-function importHealth(){
+function pasteImport(){
+  if(!navigator.clipboard||!navigator.clipboard.readText)return manualImport();
+  navigator.clipboard.readText()
+    .then(t=>{if(!t||t.length<20)return toast('Clipboard looks empty');ingest(t);})
+    .catch(()=>manualImport());
+}
+function fileImport(input){
+  const f=input.files&&input.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>ingest(String(r.result));
+  r.onerror=()=>toast('Could not read that file');
+  r.readAsText(f);
+}
+function manualImport(){
+  openSheet('<div style="padding:0 16px"><div class="sec" style="margin:8px 0 10px">Paste health data</div>'+
+    '<textarea id="imp" style="width:100%;height:180px;background:var(--bg3);border:1px solid var(--line);border-radius:9px;padding:10px;color:var(--t1);font-size:11px" placeholder="Paste the HealthAutoExport JSON"></textarea>'+
+    '<button class="btn btn-go" style="width:100%;margin:10px 0 20px" onclick="ingest(document.getElementById(\'imp\').value)">Import</button></div>');
+  setTimeout(()=>{const t=el('imp');if(t)t.focus();},300);
+}
+function ingest(text){
   try{
-    const raw=JSON.parse(el('imp').value);
+    const raw=JSON.parse(text);
     const d=raw.data||raw;
     const out=DB.get('health_metrics')||{};
     (d.metrics||[]).forEach(m=>{
@@ -1062,8 +1151,9 @@ function importHealth(){
         .sort((a,b)=>String(a.date).localeCompare(String(b.date))).slice(-120);
     });
     DB.set('health_metrics',out);DB.set('health_uploaded',TODAY);
-    closeSheet();renderAll();toast('Health data imported');
-  }catch(e){toast('Could not read that JSON');}
+    const n=Object.keys(out).length;
+    closeSheet();renderAll();toast('Imported '+n+' metrics');
+  }catch(e){toast('That is not valid JSON');}
 }
 function exportAll(){
   const out={};
