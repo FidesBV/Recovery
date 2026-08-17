@@ -135,6 +135,24 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,11,.94);backdro
 nav button{flex:1;background:none;border:none;padding:13px 0 14px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);cursor:pointer;}
 nav button.on{color:var(--t1);}
 nav b{display:block;font-size:15px;margin-bottom:3px;font-weight:400;}
+#guide{position:fixed;inset:0;background:var(--bg);z-index:180;display:none;flex-direction:column;
+  padding:calc(12px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom));}
+#guide.on{display:flex;}
+.g-top{display:flex;justify-content:space-between;align-items:center;padding:6px 0 10px;}
+.g-step{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--t3);}
+.g-bar{height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-bottom:6px;}
+.g-bar div{height:100%;background:var(--green);width:0;transition:width .3s;}
+.g-mid{flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;}
+.g-phase{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--green);}
+.g-phase.rest{color:var(--yellow);}
+.g-name{font-family:'Instrument Serif',serif;font-size:34px;line-height:1.15;margin:10px 0 8px;}
+.g-note{font-size:13px;color:var(--t2);line-height:1.6;max-width:330px;margin:0 auto;}
+.g-target{font-size:15px;color:var(--t1);margin-top:14px;}
+.g-clock{font-family:'Instrument Serif',serif;font-size:76px;line-height:1;margin-top:14px;letter-spacing:-.02em;}
+.g-btns{display:flex;flex-direction:column;gap:8px;}
+.g-main{width:100%;padding:22px;border-radius:14px;border:1px solid rgba(74,222,128,.35);background:var(--gd);
+  color:var(--green);font-size:15px;letter-spacing:.05em;cursor:pointer;}
+.g-sub{flex:1;padding:14px;border-radius:12px;border:1px solid var(--line2);background:transparent;color:var(--t3);font-size:12px;cursor:pointer;}
 #sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:150;opacity:0;pointer-events:none;transition:.25s;}
 #sheet-bg.on{opacity:1;pointer-events:auto;}
 #sheet{position:fixed;left:0;right:0;bottom:0;max-height:88vh;background:var(--bg);border-radius:20px 20px 0 0;border-top:1px solid var(--line2);z-index:160;transform:translateY(102%);transition:transform .3s cubic-bezier(.2,.8,.2,1);overflow-y:auto;max-width:520px;margin:0 auto;padding-bottom:calc(28px + env(safe-area-inset-bottom));}
@@ -183,6 +201,28 @@ nav b{display:block;font-size:15px;margin-bottom:3px;font-weight:400;}
   <button id="n-hist" onclick="go('hist')"><b>≡</b>History</button>
   <button id="n-set" onclick="openSettings()"><b>⚙</b>Settings</button>
 </nav>
+
+<div id="guide">
+  <div class="g-top">
+    <div class="g-step" id="g-step">—</div>
+    <button class="x" onclick="guideExit()">✕</button>
+  </div>
+  <div class="g-bar"><div id="g-fill"></div></div>
+  <div class="g-mid">
+    <div class="g-phase" id="g-phase">—</div>
+    <div class="g-name" id="g-name">—</div>
+    <div class="g-note" id="g-note"></div>
+    <div class="g-target" id="g-target"></div>
+    <div class="g-clock" id="g-clock"></div>
+  </div>
+  <div class="g-btns">
+    <button class="g-main" id="g-main" onclick="guideMain()">Start</button>
+    <div style="display:flex;gap:8px">
+      <button class="g-sub" onclick="guidePrev()">← Back</button>
+      <button class="g-sub" onclick="guideNext(true)">Skip →</button>
+    </div>
+  </div>
+</div>
 
 <div id="sheet-bg" onclick="closeSheet()"></div>
 <div id="sheet"><div class="grip"></div><div id="sheet-body"></div></div>
@@ -745,7 +785,8 @@ function renderSession(slot){
     '<button class="btn btn-quiet" style="width:100%;margin:'+(open?'12px':'14px')+' 0 0" onclick="toggleSess()">'+
       (open?'Hide details':'Show exercises')+'</button>'+
     '</div>'+
-    '<button class="btn btn-go" onclick="saveSession()">Log session \u2713</button>'+
+    '<button class="btn btn-go" style="padding:19px;font-size:14px" onclick="startGuide()">Start workout</button>'+
+    '<button class="btn" onclick="saveSession()">Log without guiding \u2713</button>'+
     '<button class="btn btn-quiet" onclick="skipSession()">Skip today</button>'+
     '<div id="rest-timer"></div>';
 }
@@ -759,6 +800,108 @@ function markSet(id,i){
   if(d.marks[id][i])startRest();
   renderSession();
 }
+/* ═══ GUIDED WORKOUT ═══
+   One exercise at a time, big buttons, countdown and chime. */
+let G={plan:[],i:0,left:0,timer:null,running:false};
+
+function guideBuild(){
+  const d=sessionDraft(),plan=[];
+  d.ids.forEach((id,ei)=>{
+    const t=targetFor(id);
+    const secs=parseInt((String(t.reps).match(/^([0-9]+)s/)||[])[1]||'0',10);
+    for(let sN=0;sN<t.sets;sN++){
+      plan.push({kind:'work',id,set:sN+1,sets:t.sets,secs,target:(t.kg?t.kg+' kg \u00D7 ':'')+t.reps});
+      const lastOverall=(ei===d.ids.length-1)&&(sN===t.sets-1);
+      if(!lastOverall)plan.push({kind:'rest',id,sec:(DB.get('settings')||{}).restSec||90});
+    }
+  });
+  return plan;
+}
+function startGuide(){
+  G.plan=guideBuild();
+  if(!G.plan.length)return toast('No exercises today');
+  G.i=0;
+  el('guide').classList.add('on');
+  keepAwake(true);getCtx();
+  guideShow();
+}
+function guideShow(){
+  clearInterval(G.timer);G.running=false;cancelAlarm();
+  const s=G.plan[G.i];
+  if(!s)return guideFinish();
+  const e=EX_DB[s.id];
+  const workSteps=G.plan.filter(x=>x.kind==='work');
+  const idx=workSteps.indexOf(s.kind==='work'?s:G.plan.slice(G.i).find(x=>x.kind==='work'));
+  el('g-fill').style.width=Math.round((G.i/G.plan.length)*100)+'%';
+  el('g-step').textContent='Step '+(G.i+1)+' of '+G.plan.length;
+
+  if(s.kind==='rest'){
+    el('g-phase').textContent='Rest';el('g-phase').className='g-phase rest';
+    el('g-name').textContent='Breathe';
+    const nxt=G.plan[G.i+1];
+    el('g-note').textContent=nxt?'Next: '+EX_DB[nxt.id].name+' \u00B7 set '+nxt.set+' of '+nxt.sets:'Last one done';
+    el('g-target').textContent='';
+    G.left=s.sec;el('g-clock').textContent=fmt(G.left);
+    el('g-main').textContent='Start rest';
+    return;
+  }
+  el('g-phase').textContent='Set '+s.set+' of '+s.sets;el('g-phase').className='g-phase';
+  el('g-name').textContent=e.name;
+  el('g-note').textContent=e.note||'';
+  el('g-target').textContent=s.target;
+  if(s.secs){G.left=s.secs;el('g-clock').textContent=fmt(G.left);el('g-main').textContent='Start '+s.secs+'s';}
+  else{el('g-clock').textContent='';el('g-main').textContent='Set done \u2713';}
+}
+function guideMain(){
+  const s=G.plan[G.i];
+  if(!s)return;
+  const timed=(s.kind==='rest')||(s.kind==='work'&&s.secs);
+  if(!timed){markGuideSet(s);return guideNext();}
+  if(G.running){clearInterval(G.timer);G.running=false;cancelAlarm();el('g-main').textContent='Resume';return;}
+  const secs=G.left||(s.kind==='rest'?s.sec:s.secs);
+  G.left=secs;G.running=true;
+  scheduleAlarm(secs);
+  el('g-main').textContent='Pause';
+  G.timer=setInterval(()=>{
+    G.left=Math.max(0,Math.round((deadline-Date.now())/1000));
+    el('g-clock').textContent=fmt(G.left);
+    if(G.left<=0){
+      clearInterval(G.timer);G.running=false;
+      if(navigator.vibrate)navigator.vibrate([300,100,300]);
+      if(s.kind==='work')markGuideSet(s);
+      setTimeout(guideNext,700);
+    }
+  },250);
+}
+function markGuideSet(s){
+  const d=sessionDraft();
+  d.marks[s.id]=d.marks[s.id]||{};
+  d.marks[s.id][s.set-1]=true;
+  saveDraft();
+}
+function guideNext(manual){
+  clearInterval(G.timer);G.running=false;cancelAlarm();G.left=0;
+  G.i++;
+  if(G.i>=G.plan.length)return guideFinish();
+  guideShow();
+}
+function guidePrev(){
+  clearInterval(G.timer);G.running=false;cancelAlarm();G.left=0;
+  G.i=Math.max(0,G.i-1);guideShow();
+}
+function guideFinish(){
+  clearInterval(G.timer);cancelAlarm();keepAwake(false);
+  el('guide').classList.remove('on');
+  beepNow();
+  saveSession();
+}
+function guideExit(){
+  clearInterval(G.timer);G.running=false;cancelAlarm();keepAwake(false);
+  el('guide').classList.remove('on');
+  renderToday();
+  toast('Paused \u2014 your ticked sets are kept');
+}
+
 /* Timed exercises (planks, holds, carries) get their own countdown. */
 function runHold(id,secs){
   const e=EX_DB[id];
