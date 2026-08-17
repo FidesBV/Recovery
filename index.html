@@ -454,6 +454,14 @@ EX_DB.farmer_carry.cat='core';EX_DB.farmer_carry.muscle='core';
 EX_DB.side_plank.phases=[1,2,3];
 
 const CORE_POOL=['dead_bug','bird_dog','plank','side_plank','hollow_hold','hang_knee','farmer_carry','suitcase_carry'];
+const FAMILY={farmer_carry:'carry',suitcase_carry:'carry',plank:'plank',side_plank:'plank',
+  hollow_hold:'flexion',hang_knee:'flexion',dead_bug:'antiext',bird_dog:'antiext'};
+/* One per muscle, compounds first. Isolation only if there is room. */
+const MUSCLE_ORDER={
+  push:['chest','shoulders','triceps'],
+  pull:['back','biceps'],
+  legs:['quads','hamstrings','glutes','calves']
+};
 const PRESSURE_GATED=['hollow_hold','hang_knee'];
 const ROTATION=['push','pull','legs'];
 
@@ -485,26 +493,41 @@ function pickCore(n){
   const pool=coreAvailable();
   if(!pool.length)return [];
   const seed=realSessions().length;
-  const out=[];
-  for(let i=0;i<n&&i<pool.length;i++)out.push(pool[(seed*2+i)%pool.length]);
-  return [...new Set(out)];
+  const out=[],used=new Set();
+  for(let step=0;step<pool.length&&out.length<n;step++){
+    const id=pool[(seed*2+step)%pool.length];
+    const fam=FAMILY[id]||id;
+    if(used.has(fam)||out.includes(id))continue;
+    used.add(fam);out.push(id);
+  }
+  return out;
 }
 function buildSession(){
   const type=nextType();
-  const main=Object.entries(EX_DB)
-    .filter(([id,e])=>e.cat===type&&e.muscle!=='core'&&e.phases.includes(S.phase)&&e.neck_ok!==false)
-    .map(([id])=>id);
   const seed=realSessions().length;
-  const picked=[];
   const byMuscle={};
-  main.forEach(id=>{const m=EX_DB[id].muscle;(byMuscle[m]=byMuscle[m]||[]).push(id);});
-  Object.values(byMuscle).forEach(list=>{
-    picked.push(list[seed%list.length]);
-    if(picked.length<4&&list.length>1)picked.push(list[(seed+1)%list.length]);
+  Object.entries(EX_DB).forEach(([id,e])=>{
+    if(e.cat!==type||e.muscle==='core')return;
+    if(!e.phases.includes(S.phase)||e.neck_ok===false)return;
+    (byMuscle[e.muscle]=byMuscle[e.muscle]||[]).push(id);
   });
-  const exercises=[...new Set(picked)].slice(0,5);
-  const core=pickCore(type==='legs'?3:2);
-  return {type,exercises,core};
+  const order=(MUSCLE_ORDER[type]||Object.keys(byMuscle)).filter(m=>byMuscle[m]);
+  Object.keys(byMuscle).forEach(m=>{if(!order.includes(m))order.push(m);});
+
+  const picked=[];
+  order.forEach(m=>{ if(picked.length<4) picked.push(byMuscle[m][seed%byMuscle[m].length]); });
+  // Fewer than four muscle groups (pull has two): keep filling from the
+  // biggest groups first so the session does not come up short.
+  for(let round=1;picked.length<4&&round<4;round++){
+    for(const m of order){
+      if(picked.length>=4)break;
+      const list=byMuscle[m];
+      if(list.length<=round)continue;
+      const alt=list[(seed+round)%list.length];
+      if(!picked.includes(alt))picked.push(alt);
+    }
+  }
+  return {type,exercises:picked,core:pickCore(2)};
 }
 function targetFor(id){
   const e=EX_DB[id];
@@ -837,7 +860,7 @@ function markSet(id,i){
   d.marks[id]=d.marks[id]||{};
   d.marks[id][i]=!d.marks[id][i];
   saveDraft();
-  if(d.marks[id][i])startRest();
+  if(d.marks[id][i])startRest(id);
   renderSession();
 }
 /* ═══ GUIDED WORKOUT ═══
@@ -852,7 +875,7 @@ function guideBuild(){
     for(let sN=0;sN<t.sets;sN++){
       plan.push({kind:'work',id,set:sN+1,sets:t.sets,secs,target:(t.kg?t.kg+' kg \u00D7 ':'')+t.reps});
       const lastOverall=(ei===d.ids.length-1)&&(sN===t.sets-1);
-      if(!lastOverall)plan.push({kind:'rest',id,sec:(DB.get('settings')||{}).restSec||90});
+      if(!lastOverall)plan.push({kind:'rest',id,sec:restFor(id)});
     }
   });
   return plan;
@@ -978,10 +1001,15 @@ function endHold(done){
   d.marks[id]=d.marks[id]||{};
   const t=targetFor(id);
   for(let i=0;i<t.sets;i++){if(!d.marks[id][i]){d.marks[id][i]=true;break;}}
-  saveDraft();renderSession();startRest();
+  saveDraft();renderSession();startRest(id);
 }
-function startRest(){
-  const sec=(DB.get('settings')||{restSec:90}).restSec||90;
+function restFor(id){
+  const base=(DB.get('settings')||{restSec:90}).restSec||90;
+  const e=EX_DB[id];
+  return (e&&e.muscle==='core')?Math.round(base*0.66):base;
+}
+function startRest(id){
+  const sec=id?restFor(id):((DB.get('settings')||{restSec:90}).restSec||90);
   const ok=scheduleAlarm(sec);keepAwake(true);
   const t=el('rest-timer');if(!t)return;
   t.innerHTML='<div class="card"><div class="clock" id="rt">'+fmt(sec)+'</div>'+
