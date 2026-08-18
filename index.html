@@ -356,12 +356,14 @@ function derive(){
 /* ═══ 9. THE DAY VERDICT — single source of truth ═══ */
 const STATES={
   rest:{label:'Rest day',col:'var(--red)',bg:'var(--rd)',bd:'rgba(248,113,113,.25)'},
+  softrest:{label:'Rest recommended',col:'var(--yellow)',bg:'var(--yd)',bd:'rgba(251,191,36,.25)'},
   ease:{label:'Ease off',col:'var(--yellow)',bg:'var(--yd)',bd:'rgba(251,191,36,.25)'},
   normal:{label:'Normal day',col:'var(--t1)',bg:'var(--bg2)',bd:'var(--line)'},
   room:{label:'Room to push',col:'var(--green)',bg:'var(--gd)',bd:'rgba(74,222,128,.25)'}
 };
 const PLANS={
   rest:{strength:'No strength session',aerobic:'Move the block to tomorrow',walk:'45–60 min, easy',steps:'8,000',cap:'110 bpm'},
+  softrest:{strength:'Rest recommended — override if you feel good',aerobic:'Fine to do — low load, no strength stimulus',walk:'45–60 min',steps:'10,000',cap:'125 bpm'},
   ease:{strength:'Session minus one set',aerobic:'15 min instead of 25',walk:'45–60 min',steps:'9,000',cap:'120 bpm'},
   normal:{strength:'Session as planned',aerobic:'Full block',walk:'45–60 min',steps:'10,000',cap:'125 bpm'},
   room:{strength:'Session as planned',aerobic:'Full block — spend it here',walk:'60 min',steps:'11,000',cap:'130 bpm'}
@@ -372,6 +374,11 @@ function decideDay(){
   if(S.tempDev>0.5){k='rest';why.push('Wrist temp +'+S.tempDev.toFixed(2)+'\u00B0C over your own baseline');}
   else if(S.hrv<25){k='rest';why.push('HRV '+Math.round(S.hrv)+' ms — below your floor');}
   else if(S.consec>=2){k='rest';why.push(S.consec+' training days back to back');}
+  else if(S.consec===1&&!DB.get('override_rest_'+TODAY)){
+    return {k:'rest',soft:true,
+      why:['You trained yesterday — a day between strength sessions is the plan'],
+      plan:PLANS.softrest};
+  }
   else{
     const drop=S.hrv7?(S.hrv7-S.hrv)/S.hrv7:0;
     const rhrUp=S.rhrBase&&S.rhr?S.rhr-S.rhrBase:0;
@@ -720,7 +727,7 @@ function renderToday(){
     cell(sc,'Score',sc>=75?'var(--green)':sc>=55?'var(--yellow)':'var(--red)')+'</div>';
 
   // verdict
-  const V=STATES[S.verdict.k],pl=S.verdict.plan;
+  const V=STATES[S.verdict.soft?'softrest':S.verdict.k],pl=S.verdict.plan;
   el('t-verdict').innerHTML=
     '<div class="verdict" style="background:'+V.bg+';border-color:'+V.bd+'">'+
       '<div class="v-head"><div class="v-title" style="color:'+V.col+'">'+V.label+'</div>'+
@@ -809,8 +816,12 @@ function renderSession(slot){
     return;
   }
   if(S.verdict.k==='rest'){
-    wrap.innerHTML=lead+'<div class="card"><div style="font-size:13px;margin-bottom:5px">Rest is the session</div>'+
-      '<div class="muted">'+h(S.verdict.why[0])+'. Easy walking is fine and helps — keep it under '+S.verdict.plan.cap+'.</div></div>'+
+    const soft=!!S.verdict.soft;
+    wrap.innerHTML=lead+'<div class="card"><div style="font-size:13px;margin-bottom:5px">'+
+      (soft?'A day between sessions':'Rest is the session')+'</div>'+
+      '<div class="muted">'+h(S.verdict.why[0])+'. '+
+      (soft?'Walking and the aerobic block are fine — neither is a strength stimulus.'
+           :'Easy walking is fine and helps — keep it under '+S.verdict.plan.cap+'.')+'</div></div>'+
       '<button class="btn" onclick="logRest()">Log rest day</button>'+
       '<button class="btn btn-quiet" onclick="overrideRest()">Train anyway</button>';
     return;
@@ -1066,7 +1077,11 @@ function logRest(){
   log.push({date:TODAY,type:'rest',ts:Date.now()});
   DB.set('session_log',log);toast('Rest day logged');renderAll();
 }
-function overrideRest(){DB.set('override_rest_'+TODAY,true);S.verdict.k='ease';S.verdict.plan=PLANS.ease;renderSession();toast('Training anyway — one set less');}
+function overrideRest(){
+  DB.set('override_rest_'+TODAY,true);
+  derive();renderToday();
+  toast('Training anyway — one set less');
+}
 /* ═══ 18. AEROBIC UI ═══ */
 let aeroMode='stepup',aeroLeft=0,aeroTimer=null,aeroRunning=false,ropeSet=1,ropePhase='work';
 let AERO_SLOT='blk-b';
@@ -1096,7 +1111,7 @@ function renderAerobic(slot){
       (e.pelvic?' · <span style="color:var(--yellow)">pelvic symptoms logged</span>':'')+'</div></div>';
     return;
   }
-  if(S.verdict.k==='rest'){
+  if(S.verdict.k==='rest'&&!S.verdict.soft){
     wrap.innerHTML=lead+'<div class="card">'+
       '<div style="font-size:13px;margin-bottom:5px">Moved</div>'+
       '<div class="muted">'+h(S.verdict.why[0])+'. Shift the block to tomorrow rather than dropping it.</div></div>';
