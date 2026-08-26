@@ -456,24 +456,56 @@ function decideDay(){
 }
 
 /* ═══ 10. SCORE ═══ */
+/* Same weights, but for any date, so history can be rebuilt from the
+   health data you already have instead of needing to be stored. */
+function scoreParts(hrv7,rhr7,totSleep,deep,vo2,resp,bp){
+  const hs=hrv7>=40?35:hrv7>=25?35*((hrv7-25)/15):0;
+  const rs=rhr7<=0?10:Math.max(0,Math.min(20,20*(1-(rhr7-55)/15)));
+  const dur=totSleep<=0?0:Math.max(0,Math.min(15,15*((totSleep-5.5)/2)));
+  const dp=deep<=0?0:Math.min(5,5*(deep/0.9));
+  const vs=vo2<=0?7.5:Math.max(0,Math.min(15,15*((vo2-32)/10)));
+  const bs=resp<=0?2.5:resp<14?5:resp<15?3:1;
+  const ps=bp?((bp.sys<130&&bp.dia<85)?5:(bp.sys<140&&bp.dia<90)?3:1):2.5;
+  return {total:Math.max(0,Math.min(100,Math.round(hs+rs+dur+dp+vs+bs+ps))),
+    parts:[['HRV',hs,35],['Resting HR',rs,20],['Sleep duration',dur,15],['Deep sleep',dp,5],
+      ['VO2max',vs,15],['Breathing',bs,5],['Blood pressure',ps,5]]};
+}
+let _hist=null;
+function scoreHistory(days){
+  const key=days+'|'+TODAY;
+  if(_hist&&_hist.key===key)return _hist.out;
+  const hrv=Object.fromEntries(metricSeries('heart_rate_variability',days+40));
+  const rhr=Object.fromEntries(metricSeries('resting_heart_rate',days+40));
+  const resp=Object.fromEntries(metricSeries('respiratory_rate',days+40));
+  const vo2=metricSeries('vo2_max',days+120);
+  const sl={};sleepRecords().forEach(r=>{const d=(r.date||'').slice(0,10);if(d)sl[d]=r;});
+  const bpl=(DB.get('bp_log')||[]);
+  const win=(map,d,f)=>{
+    const v=[];
+    for(let i=0;i<7;i++){const k=addDays(d,-i);const x=f?f(map[k]):map[k];if(x>0)v.push(x);}
+    return mean(v);
+  };
+  const out=[];
+  for(let i=days-1;i>=0;i--){
+    const d=addDays(TODAY,-i);
+    if(!hrv[d]&&!rhr[d])continue;
+    const v=vo2.filter(e=>e[0]<=d).pop();
+    const bp=bpl.filter(x=>x.date<=d&&x.date>=addDays(d,-14)).pop();
+    out.push({date:d,score:scoreParts(
+      win(hrv,d),win(rhr,d),
+      win(sl,d,r=>r&&r.totalSleep),win(sl,d,r=>r&&r.deep),
+      v?v[1]:0,win(resp,d),bp).total});
+  }
+  _hist={key,out};
+  return out;
+}
+function scoreColour(n){return n>=75?'var(--green)':n>=55?'var(--yellow)':'var(--red)';}
 function calcScore(){
   const h=S.hrv7,r=mean(S.rhrV.slice(-7)),v=S.vo2,resp=S.resp;
   const tot=mean(sleepRecords().slice(-7).map(x=>x.totalSleep||0));
   const deep=mean(S.deep7);
-  const hs=h>=40?35:h>=25?35*((h-25)/15):0;
-  const rs=r<=0?10:Math.max(0,Math.min(20,20*(1-(r-55)/15)));
-  // Sleep 20: duration carries 15 of it, because in your own data total
-  // sleep tracks HRV (r = 0.20) and deep sleep does not (r = 0.03).
-  const dur=tot<=0?0:Math.max(0,Math.min(15,15*((tot-5.5)/2)));
-  const dp=deep<=0?0:Math.min(5,5*(deep/0.9));
-  const ds=dur+dp;
-  const vs=v<=0?7.5:Math.max(0,Math.min(15,15*((v-32)/10)));
-  const bs=resp<=0?2.5:resp<14?5:resp<15?3:1;
   const bp=(DB.get('bp_log')||[]).filter(x=>x.date>=addDays(TODAY,-14)).pop();
-  const ps=bp?((bp.sys<130&&bp.dia<85)?5:(bp.sys<140&&bp.dia<90)?3:1):2.5;
-  return {total:Math.max(0,Math.min(100,Math.round(hs+rs+ds+vs+bs+ps))),
-    parts:[['HRV',hs,35],['Resting HR',rs,20],['Sleep duration',dur,15],['Deep sleep',dp,5],
-      ['VO2max',vs,15],['Breathing',bs,5],['Blood pressure',ps,5]]};
+  return scoreParts(h,r,tot,deep,v,resp,bp);
 }
 const EX_DB = {
   // ─── PUSH ───────────────────────────────
@@ -1422,6 +1454,35 @@ function monthlyTable(){
       '<span style="flex:1;text-align:right;font-size:11px">'+cell(m[k].wt,1)+'</span></div>').join('')+
     '</div>';
 }
+/* Four tiles answer "which way am I going" in one glance;
+   the full chart is one tap away instead of always on screen. */
+let progOpen=null;
+function trend28(name){
+  const ser=metricSeries(name,120);
+  if(ser.length<2)return null;
+  const now=ser[ser.length-1][1];
+  const before=ser.filter(e=>e[0]<=addDays(TODAY,-28)).pop();
+  return before?+(now-before[1]).toFixed(2):null;
+}
+function tile(key,label,cur,unit,delta,better,dec){
+  const open=progOpen===key;
+  let col='var(--t2)',arrow=AR_R;
+  if(delta!==null&&Math.abs(delta)>=(dec?0.3:0.5)){
+    const good=better==='down'?delta<0:delta>0;
+    col=good?'var(--green)':'var(--red)';
+    arrow=delta>0?'\u2191':'\u2193';
+  }
+  return '<div onclick="toggleMetric(\''+key+'\')" style="cursor:pointer;background:var(--bg2);border:1px solid '+
+    (open?'var(--line2)':'var(--line)')+';border-radius:12px;padding:12px 13px">'+
+    '<div class="muted" style="font-size:9px;letter-spacing:.1em;text-transform:uppercase">'+label+'</div>'+
+    '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:5px">'+
+      '<span style="font-family:\'Instrument Serif\',serif;font-size:23px">'+(cur?cur.toFixed(dec):EM_D)+
+      '<span style="font-size:10px;color:var(--t3)"> '+unit+'</span></span>'+
+      '<span style="color:'+col+';font-size:11px">'+arrow+(delta===null?'':' '+(delta>0?'+':'')+delta.toFixed(dec||1))+'</span>'+
+    '</div><div class="muted" style="font-size:9px;margin-top:3px">vs 4 weeks ago</div></div>';
+}
+const AR_R='\u2192', EM_D='\u2014';
+function toggleMetric(k){progOpen=progOpen===k?null:k;renderProgress();}
 function metricCard(name,cur,unit,data,better,dec){
   if(!data.length)return '<div class="metric"><div class="m-name">'+name+'</div><div class="muted" style="margin-top:6px">No data yet</div></div>';
   const first=data[0],diff=cur-first;
@@ -1447,20 +1508,42 @@ function renderProgress(){
   const b=el('p-body');
   if(progTab==='health'){
     const R=progRange;
-    b.innerHTML=rangeBar()+
-      metricCard('HRV',S.hrv7||0,'ms',vals('heart_rate_variability',R),'up',1)+
-      metricCard('Resting HR',mean(S.rhrV.slice(-7))||0,'bpm',vals('resting_heart_rate',R),'down',0)+
-      metricCard('VO2max',S.vo2||0,'',vals('vo2_max',R),'up',1)+
-      metricCard('Deep sleep',mean(S.deep7)||0,'h',sleepRecords().slice(-R).map(r=>r.deep||0).filter(x=>x>0),'up',2)+
-      '<div class="sec">Recovery score</div><div class="card">'+
-      '<div class="row" style="margin-bottom:12px"><div style="font-family:\'Instrument Serif\',serif;font-size:38px">'+S.score.total+'</div>'+
-      '<div class="muted" style="text-align:right;max-width:60%">Weighted for what actually moves: HRV, resting HR, sleep, VO2max.</div></div>'+
+    const M={
+      hrv:{label:'HRV',cur:S.hrv7,unit:'ms',d:trend28('heart_rate_variability'),better:'up',dec:1,
+        data:vals('heart_rate_variability',R),name:'HRV'},
+      rhr:{label:'Resting HR',cur:mean(S.rhrV.slice(-7)),unit:'bpm',d:trend28('resting_heart_rate'),better:'down',dec:0,
+        data:vals('resting_heart_rate',R),name:'Resting HR'},
+      vo2:{label:'VO2max',cur:S.vo2,unit:'',d:trend28('vo2_max'),better:'up',dec:1,
+        data:vals('vo2_max',R),name:'VO2max'},
+      sleep:{label:'Sleep',cur:mean(sleepRecords().slice(-7).map(x=>x.totalSleep||0)),unit:'h',d:null,better:'up',dec:1,
+        data:sleepRecords().slice(-R).map(x=>x.totalSleep||0).filter(x=>x>0),name:'Sleep'}
+    };
+    const moving=Object.values(M).filter(m=>m.d!==null&&Math.abs(m.d)>=(m.dec?0.3:0.5));
+    const wrong=moving.filter(m=>m.better==='down'?m.d>0:m.d<0);
+    const verdict=!moving.length?'Everything flat over the last four weeks.'
+      :wrong.length===0?'All moving metrics are going the right way.'
+      :(wrong.length===1?wrong[0].label+' is':
+         wrong.slice(0,-1).map(m=>m.label).join(', ')+' and '+wrong[wrong.length-1].label+' are')+
+        ' still going the wrong way.';
+
+    b.innerHTML=
+      '<div class="card" style="margin-bottom:12px"><div class="muted" style="line-height:1.6">'+h(verdict)+'</div></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 16px 12px">'+
+        tile('hrv',M.hrv.label,M.hrv.cur,M.hrv.unit,M.hrv.d,'up',1)+
+        tile('rhr',M.rhr.label,M.rhr.cur,M.rhr.unit,M.rhr.d,'down',0)+
+        tile('vo2',M.vo2.label,M.vo2.cur,M.vo2.unit,M.vo2.d,'up',1)+
+        tile('sleep',M.sleep.label,M.sleep.cur,M.sleep.unit,M.sleep.d,'up',1)+
+      '</div>'+
+      (progOpen&&M[progOpen]?rangeBar()+metricCard(M[progOpen].name,M[progOpen].cur||0,M[progOpen].unit,M[progOpen].data,M[progOpen].better,M[progOpen].dec):
+        '<div class="muted" style="margin:0 20px 14px">Tap a tile for the full chart.</div>')+
+      '<div class="sec">Month by month</div>'+monthlyTable()+
+      '<div class="sec">Recovery score</div>'+scoreCard()+
+      '<div class="card">'+
       S.score.parts.map(([l,v,m])=>
         '<div style="margin-bottom:8px"><div class="row" style="margin-bottom:3px"><span class="muted">'+l+'</span>'+
         '<span class="muted">'+Math.round(v)+' / '+m+'</span></div>'+
         '<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+Math.round(v/m*100)+'%;background:var(--t2)"></div></div></div>').join('')+
       '</div>'+
-      '<div class="sec">Month by month</div>'+monthlyTable()+
       '<div class="sec">Your own correlations</div>'+renderPatterns()+
       '<div class="sec">Looking back</div>'+buildRetrospect()+
       '<div class="sec">Summary</div><div class="card">'+
@@ -1494,6 +1577,38 @@ function renderProgress(){
 }
 
 /* ═══ 21. HISTORY ═══ */
+/* Where the score has been, not just where it is. */
+function scoreCard(){
+  const hist=scoreHistory(60);
+  if(hist.length<2)
+    return '<div class="card"><div style="font-family:\'Instrument Serif\',serif;font-size:38px">'+S.score.total+'</div>'+
+      '<div class="muted" style="margin-top:6px">History appears once there are a few days of health data.</div></div>';
+  const now=hist[hist.length-1].score;
+  const wk=hist.filter(x=>x.date<=addDays(TODAY,-7)).pop();
+  const mo=hist.filter(x=>x.date<=addDays(TODAY,-28)).pop();
+  const dW=wk?now-wk.score:null, dM=mo?now-mo.score:null;
+  const dcol=d=>d===null?'var(--t3)':d>=2?'var(--green)':d<=-2?'var(--red)':'var(--t2)';
+  const dtxt=d=>d===null?'\u2014':(d>0?'+':'')+d;
+  const lights=hist.slice(-30).map(x=>
+    '<div title="'+x.date+' \u00B7 '+x.score+'" style="flex:1;height:22px;border-radius:3px;background:'+scoreColour(x.score)+';opacity:'+
+    (x.date===TODAY?'1':'.55')+'"></div>').join('');
+  setTimeout(()=>{const c=el('c-score');if(c){c.dataset.h=54;sparkline('c-score',hist.map(x=>x.score),'#9A9AA5');}},0);
+  return '<div class="card">'+
+    '<div class="row" style="align-items:flex-end;margin-bottom:12px">'+
+      '<div><div style="font-family:\'Instrument Serif\',serif;font-size:38px;color:'+scoreColour(now)+'">'+now+'</div>'+
+      '<div class="muted" style="margin-top:2px">'+(now>=75?'good':now>=55?'holding':'under pressure')+'</div></div>'+
+      '<div style="text-align:right"><div class="muted">week <span style="color:'+dcol(dW)+'">'+dtxt(dW)+'</span></div>'+
+      '<div class="muted" style="margin-top:3px">month <span style="color:'+dcol(dM)+'">'+dtxt(dM)+'</span></div></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:2px;margin-bottom:8px">'+lights+'</div>'+
+    '<div class="row"><span class="muted" style="font-size:9px">30 days ago</span><span class="muted" style="font-size:9px">today</span></div>'+
+    '<canvas id="c-score" style="height:54px;margin-top:12px"></canvas>'+
+    '<div class="row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">'+
+      '<span class="muted" style="font-size:9px;color:var(--red)">\u25A0 under 55</span>'+
+      '<span class="muted" style="font-size:9px;color:var(--yellow)">\u25A0 55\u201374</span>'+
+      '<span class="muted" style="font-size:9px;color:var(--green)">\u25A0 75+</span></div>'+
+    '</div>';
+}
 function volumePanel(){
   const now=weeklyVolume(0),prev=weeklyVolume(1);
   const names={chest:'Chest',shoulders:'Shoulders',triceps:'Triceps',back:'Back',biceps:'Biceps',
@@ -1575,7 +1690,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v6.6 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v6.8 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 function srow(l,s,ctrl){return '<div class="srow"><div><div class="s-l">'+l+'</div><div class="s-s">'+s+'</div></div>'+ctrl+'</div>';}
@@ -1682,13 +1797,13 @@ function strengthWord(r){
 function renderPatterns(){
   const pats=buildPatterns();
   if(!pats.length)return '<div class="card"><div class="muted">Not enough overlapping data yet — patterns need about two weeks.</div></div>';
-  return pats.map(p=>{
+  return '<div class="card">'+pats.map(p=>{
     const col=Math.abs(p.r)<0.15?'var(--t3)':p.r>0?'var(--green)':'var(--red)';
-    return '<div class="card"><div class="row" style="align-items:baseline">'+
-      '<div style="font-size:12px">'+p.title+'</div>'+
-      '<div style="color:'+col+';font-size:13px">r = '+p.r.toFixed(2)+'</div></div>'+
-      '<div class="muted" style="margin-top:6px">'+strengthWord(p.r)+' \u00B7 '+p.n+' paired days \u00B7 '+p.text+'</div></div>';
-  }).join('');
+    return '<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);align-items:baseline">'+
+      '<div style="flex:1;font-size:11px">'+p.title+
+        '<div class="muted" style="font-size:9px;margin-top:2px">'+strengthWord(p.r)+' \u00B7 '+p.n+' days</div></div>'+
+      '<div style="color:'+col+';font-size:12px">'+p.r.toFixed(2)+'</div></div>';
+  }).join('')+'<div class="muted" style="margin-top:9px;line-height:1.6">Under 0.15 means no relationship. These are your own numbers, not general principles.</div></div>';
 }
 
 /* ═══ 25. RETROSPECT — did last week's verdict hold up ═══ */
@@ -1710,7 +1825,7 @@ function buildRetrospect(){
   const weeks=Object.keys(wk).sort().slice(-4).reverse();
   const hrvBy=Object.fromEntries(metricSeries('heart_rate_variability',120));
 
-  return weeks.map(w=>{
+  const rows=weeks.map(w=>{
     const days=wk[w],end=addDays(w,6);
     const counts={};days.forEach(a=>counts[a.state]=(counts[a.state]||0)+1);
     const inWeek=[],nextWeek=[];
@@ -1722,14 +1837,15 @@ function buildRetrospect(){
     const diff=(a&&b)?+(b-a).toFixed(1):null;
     const col=diff===null?'var(--t3)':diff>=1?'var(--green)':diff<=-1?'var(--red)':'var(--t2)';
     const word=diff===null?'no follow-up data':diff>=1?'HRV rose after':diff<=-1?'HRV fell after':'HRV flat after';
+    if(diff===null)return '';
     const mix=Object.entries(counts).map(([k,n])=>n+'\u00D7 '+STATES[k].label.toLowerCase()).join(', ');
-    return '<div class="card"><div class="row" style="align-items:baseline">'+
-      '<div style="font-size:12px">Week of '+w+'</div>'+
-      '<div style="color:'+col+';font-size:12px">'+(diff===null?'—':(diff>0?'+':'')+diff+' ms')+'</div></div>'+
-      '<div class="muted" style="margin-top:6px">'+h(mix)+'</div>'+
-      '<div class="muted" style="margin-top:4px;color:'+col+'">'+word+
-        (a&&b?' ('+a.toFixed(1)+' \u2192 '+b.toFixed(1)+')':'')+'</div></div>';
-  }).join('');
+    return '<div style="padding:9px 0;border-bottom:1px solid var(--line)">'+
+      '<div class="row" style="align-items:baseline"><div style="font-size:11px">Week of '+w+'</div>'+
+      '<div style="color:'+col+';font-size:12px">'+(diff>0?'+':'')+diff+' ms</div></div>'+
+      '<div class="muted" style="font-size:9px;margin-top:3px">'+h(mix)+' \u2192 '+word+'</div></div>';
+  }).filter(Boolean);
+  if(!rows.length)return '<div class="card"><div class="muted">No week with follow-up data yet.</div></div>';
+  return '<div class="card">'+rows.join('')+'</div>';
 }
 
 /* ═══ 26. MONTHLY SUMMARY ═══ */
