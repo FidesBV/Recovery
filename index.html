@@ -414,14 +414,16 @@ const STATES={
   softrest:{label:'Rest recommended',col:'var(--yellow)',bg:'var(--yd)',bd:'rgba(251,191,36,.25)'},
   ease:{label:'Ease off',col:'var(--yellow)',bg:'var(--yd)',bd:'rgba(251,191,36,.25)'},
   normal:{label:'Normal day',col:'var(--t1)',bg:'var(--bg2)',bd:'var(--line)'},
-  room:{label:'Room to push',col:'var(--green)',bg:'var(--gd)',bd:'rgba(74,222,128,.25)'}
+  room:{label:'Room to push',col:'var(--green)',bg:'var(--gd)',bd:'rgba(74,222,128,.25)'},
+  deload:{label:'Deload week',col:'var(--blue)',bg:'rgba(125,166,240,.08)',bd:'rgba(125,166,240,.28)'}
 };
 const PLANS={
   rest:{strength:'No strength session',aerobic:'Move the block to tomorrow',walk:'45–60 min, easy',steps:'8,000',cap:'110 bpm'},
   softrest:{strength:'Rest recommended — override if you feel good',aerobic:'Moderate block fine — no intervals',walk:'45–60 min',steps:'10,000',cap:'148 bpm'},
   ease:{strength:'Session minus one set',aerobic:'Moderate 15 min, skip intervals',walk:'45–60 min',steps:'9,000',cap:'140 bpm'},
   normal:{strength:'Session as planned',aerobic:'Full block · 140–148 bpm',walk:'45–60 min',steps:'10,000',cap:'148 bpm'},
-  room:{strength:'Session as planned',aerobic:'Intervals — spend it here',walk:'60 min',steps:'11,000',cap:'170 bpm'}
+  room:{strength:'Session as planned',aerobic:'Intervals — spend it here',walk:'60 min',steps:'11,000',cap:'170 bpm'},
+  deload:{strength:'One set less on everything',aerobic:'Moderate only — no intervals this week',walk:'45–60 min',steps:'10,000',cap:'148 bpm'}
 };
 function decideDay(){
   const why=[];let k='normal';
@@ -451,6 +453,12 @@ function decideDay(){
     else if(trend>=2){k='ease';why.push('Week average HRV down '+trend.toFixed(1)+' ms');}
     else if(S.hrv>=36&&S.hrv7>=35&&rhrUp<=1&&S.consec===0){k='room';why.push('HRV '+Math.round(S.hrv)+' ms, resting HR at baseline');}
     else why.push('Everything inside your normal range');
+  }
+  // A deload week is planned recovery, so it overrules a good day. The
+  // card can no longer say "push" and "cut sets" in the same breath.
+  if(S.deload&&(k==='room'||k==='normal')){
+    return {k:'deload',why:['Planned deload — week 5 of the cycle'+
+      (k==='room'?', even though today reads strong':'')],plan:PLANS.deload};
   }
   return {k,why,plan:PLANS[k]};
 }
@@ -823,14 +831,15 @@ function renderToday(){
     cell(sc,'Score',sc>=75?'var(--green)':sc>=55?'var(--yellow)':'var(--red)')+'</div>';
 
   // verdict
-  const V=STATES[S.verdict.soft?'softrest':S.verdict.k],pl=S.verdict.plan;
+  const V=STATES[S.verdict.soft?'softrest':S.verdict.k]||STATES.normal,pl=S.verdict.plan;
   el('t-verdict').innerHTML=
     '<div class="verdict" style="background:'+V.bg+';border-color:'+V.bd+'">'+
       '<div class="v-head"><div class="v-title" style="color:'+V.col+'">'+V.label+'</div>'+
       '<div class="v-meta">HRV '+(S.hrv?Math.round(S.hrv):'—')+' · 7d '+(S.hrv7?Math.round(S.hrv7):'—')+'</div></div>'+
-      '<div class="v-why">'+h(S.verdict.why.join(' · '))+(S.deload?' · deload week: one set less everywhere':'')+'</div>'+
+      '<div class="v-why">'+h(S.verdict.why.join(' · '))+
+        (S.deload&&S.verdict.k!=='deload'&&S.verdict.k!=='rest'?' · deload week: one set less':'')+'</div>'+
       '<div class="v-plan">'+
-        row('Strength',pl.strength+(S.deload&&S.verdict.k!=='rest'?', one set less':''))+
+        row('Strength',pl.strength+(S.deload&&S.verdict.k!=='rest'&&S.verdict.k!=='deload'?', one set less':''))+
         row('Aerobic',pl.aerobic)+
         row('Walking',pl.walk+' · '+pl.steps+' steps')+
         row('HR ceiling',pl.cap)+
@@ -869,7 +878,8 @@ function vo2Line(){
   return '<div class="note" style="border-color:var(--line);background:var(--bg2)">'+
     '<div class="row" style="align-items:baseline">'+
       '<b style="font-weight:400">VO2max '+now.toFixed(1)+'</b>'+
-      '<span style="color:'+col+';font-size:11px">'+(d28===null?'':(d28>0?'+':'')+d28.toFixed(1)+' in 4 weeks')+'</span>'+
+      '<span style="color:'+col+';font-size:11px">'+(d28===null?'':
+        (Math.abs(d28)<0.3?'unchanged in 4 weeks':(d28>0?'+':'')+d28.toFixed(1)+' in 4 weeks'))+'</span>'+
     '</div>'+
     '<span class="muted">'+word+' \u00B7 '+(dAll>0?'+':'')+dAll.toFixed(1)+' since '+start[0]+
       ' \u00B7 target 40+, the aerobic blocks are the lever</span></div>';
@@ -1252,6 +1262,8 @@ function renderAerobic(slot){
   }
 
   const locked=!S.pelvic;
+  const noIntervals=S.verdict.k==='deload'||S.verdict.k==='ease';
+  if(noIntervals&&AERO_MODES[aeroMode].kind==='interval')aeroMode='shadow';
   const M=AERO_MODES[aeroMode];
   const isInterval=M.kind==='interval';
   const stair=stairProtocol(),rope=ropeProtocol();
@@ -1259,9 +1271,11 @@ function renderAerobic(slot){
   const z=zoneFor(aeroMode);
 
   const btns=Object.entries(AERO_MODES).map(([k,m])=>{
-    const dis=m.gated&&locked;
+    const gated=m.gated&&locked;
+    const dis=gated||(noIntervals&&m.kind==='interval');
     return '<button class="'+(k===aeroMode?'on':'')+'"'+(dis?' disabled':'')+
-      ' onclick="'+(dis?'toast(\'Locked until pelvic physio\')':'setAero(\''+k+'\')')+'">'+m.name+(dis?' \u{1F512}':'')+'</button>';
+      ' onclick="'+(dis?(gated?'toast(\'Locked until pelvic physio\')':'toast(\'No intervals on an easy week\')'):'setAero(\''+k+'\')')+
+      '">'+m.name+(gated?' \u{1F512}':'')+'</button>';
   }).join('');
 
   const target=aeroMode==='stairs'?stair.rounds+' rounds \u00B7 hard up, slow down'
@@ -1278,6 +1292,7 @@ function renderAerobic(slot){
     '<div style="background:var(--bg3);border-radius:8px;padding:9px;text-align:center;font-size:11px;color:var(--t2);margin-bottom:11px">'+
       'Target HR '+z[0]+'\u2013'+z[1]+' bpm'+(isInterval?' at the top':'')+'</div>'+
     (S.verdict.k==='ease'?'<div class="note" style="margin:0 0 11px;border-color:rgba(251,191,36,.25);background:var(--yd);color:var(--yellow);text-align:center;font-size:10px">Eased day \u2014 keep it moderate, skip the intervals</div>':'')+
+    (S.verdict.k==='deload'?'<div class="note" style="margin:0 0 11px;border-color:rgba(125,166,240,.28);background:rgba(125,166,240,.08);color:var(--blue);text-align:center;font-size:10px">Deload week \u2014 moderate only, ceiling 148 bpm</div>':'')+
     '<div class="muted" style="margin-bottom:12px">'+M.cue+'</div>'+
     (aeroMode==='rope'?'<div class="note" style="margin:0 0 12px;border-color:rgba(248,113,113,.2);background:var(--rd)"><b style="color:var(--red);font-size:9px;letter-spacing:.1em;text-transform:uppercase">Stop immediately on</b><span class="muted">'+ROPE_STOP.map(x=>'\u00B7 '+x).join('<br>')+'</span></div>':'')+
     (aeroMode==='stepup'?'<div class="note" style="margin:0 0 12px;border-color:rgba(251,191,36,.25);background:var(--yd)"><span class="muted">Backup option. Keep it to once a week while your feet are sore \u2014 the descent is what loads the plantar fascia.</span></div>':'')+
@@ -1690,7 +1705,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v6.8 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v6.9 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 function srow(l,s,ctrl){return '<div class="srow"><div><div class="s-l">'+l+'</div><div class="s-s">'+s+'</div></div>'+ctrl+'</div>';}
