@@ -293,7 +293,10 @@ function weekStreak(){
   for(let i=1;i<60;i++){ if(weekMet(i).ok)n++; else break; }
   return n;
 }
-function thisWeekProgress(){const w=weekMet(0);return w.str+' strength \u00B7 '+w.aer+'/'+AERO_TARGET+' aerobic';}
+function thisWeekProgress(){
+  const w=weekMet(0);
+  return w.str+' strength \u00B7 '+w.aer+'/'+AERO_TARGET+' aerobic \u00B7 '+daysLeftInWeek()+'d left';
+}
 
 /* ═══ 5. PHASE — ratchet, not a switch ═══ */
 function rawPhase(hrvV){const a=mean(hrvV.slice(-7));return !a?1:a>=42?3:a>=36?2:1;}
@@ -568,6 +571,28 @@ EX_DB.suitcase_carry={name:'Suitcase carry',cat:'core',muscle:'core',eq:['db'],p
   neck_ok:true,pelvis_ok:true,note:'One dumbbell, one side. Resisting the lean is the exercise.'};
 EX_DB.farmer_carry.cat='core';EX_DB.farmer_carry.muscle='core';
 EX_DB.side_plank.phases=[1,2,3];
+['lunge','sl_rdl','hip_thrust','sl_bridge'].forEach(id=>{
+  if(EX_DB[id]&&!EX_DB[id].phases.includes(1)){
+    EX_DB[id].phases=[1].concat(EX_DB[id].phases);
+    EX_DB[id].sets=Object.assign({1:3},EX_DB[id].sets||{});
+    EX_DB[id].reps=Object.assign({1:EX_DB[id].reps&&EX_DB[id].reps[2]||'8-10'},EX_DB[id].reps||{});
+  }
+});
+if(EX_DB.sl_rdl)EX_DB.sl_rdl.note='One leg at a time \u2014 doubles the load without heavier dumbbells';
+if(EX_DB.lunge)EX_DB.lunge.note='Step back, not forward. Knee tracks over the middle of the foot';
+
+/* ═══ EXERCISE EXCLUSIONS ═══
+   Anything you cannot or should not do right now, kept out of the
+   rotation without losing the exercise itself. */
+function excluded(){return DB.get('excluded')||[];}
+function isExcluded(id){return excluded().indexOf(id)!==-1;}
+function toggleExcluded(id){
+  const e=excluded(),i=e.indexOf(id);
+  if(i===-1)e.push(id);else e.splice(i,1);
+  DB.set('excluded',e);
+  SESS=null;DB.del('draft_'+TODAY);
+  derive();renderToday();openExercises();
+}
 
 const CORE_POOL=['dead_bug','bird_dog','plank','side_plank','hollow_hold','hang_knee','farmer_carry','suitcase_carry'];
 const FAMILY={farmer_carry:'carry',suitcase_carry:'carry',plank:'plank',side_plank:'plank',
@@ -584,6 +609,7 @@ const ROTATION=['push','pull','legs'];
 function coreAvailable(){
   return CORE_POOL.filter(id=>{
     const e=EX_DB[id];if(!e)return false;
+    if(isExcluded(id))return false;
     if(PRESSURE_GATED.includes(id)&&!S.pelvic)return false;
     return e.phases.includes(S.phase);
   });
@@ -604,7 +630,7 @@ function nextType(){
   let t=lastReal?ROTATION[(ROTATION.indexOf(lastReal.type)+1)%3]:'push';
   // Legs and stair intervals load the same calves and quads. Do not
   // stack them on the same day, or the day after one another.
-  const clash=isAeroDay()||AERO_DAYS.includes((new Date(TODAY).getDay()+6)%7);
+  const clash=aeroLog().some(a=>a.date===TODAY)||aeroYesterday();
   if(t==='legs'&&clash){
     const alt=ROTATION[(ROTATION.indexOf(t)+1)%3];
     if(!lastReal||lastReal.type!==alt)return alt;
@@ -639,6 +665,7 @@ function buildSession(){
   Object.entries(EX_DB).forEach(([id,e])=>{
     if(e.cat!==type||e.muscle==='core')return;
     if(!e.phases.includes(S.phase)||e.neck_ok===false)return;
+    if(isExcluded(id))return;
     (byMuscle[e.muscle]=byMuscle[e.muscle]||[]).push(id);
   });
   const order=(MUSCLE_ORDER[type]||Object.keys(byMuscle)).filter(m=>byMuscle[m]);
@@ -729,13 +756,25 @@ function stairProtocol(){
 function ropeProtocol(){const w=aeroWeek();return w<=1?{sets:3,work:30}:w<=2?{sets:4,work:45}:w<=3?{sets:5,work:60}:{sets:6,work:60};}
 function weekStart(){const d=new Date(TODAY);d.setDate(d.getDate()-((d.getDay()+6)%7));return iso(d);}
 function aeroThisWeek(){const ws=weekStart();return aeroLog().filter(e=>e.date>=ws);}
-function isAeroDay(){return AERO_DAYS.includes(new Date(TODAY).getDay());}
+/* Two blocks a week, on whichever days suit you. The only hard rule is
+   a day between them; a fixed weekday was my invention, not evidence. */
+function daysLeftInWeek(){return 7-((new Date(TODAY).getDay()+6)%7);}
+function aeroOpen(){
+  if(aeroThisWeek().length>=AERO_TARGET)return false;
+  if(aeroYesterday())return false;
+  if(S.verdict&&S.verdict.k==='rest'&&!S.verdict.soft)return false;
+  return true;
+}
+function aeroUrgent(){
+  const todo=AERO_TARGET-aeroThisWeek().length;
+  return todo>0&&daysLeftInWeek()<=todo+1;
+}
+function isAeroDay(){return aeroOpen();}
 function aeroYesterday(){return aeroLog().some(e=>e.date===addDays(TODAY,-1));}
 function nextAeroDay(){
-  const t=new Date(TODAY).getDay();
-  const names={2:'Tuesday',5:'Friday'};
-  for(let i=1;i<=7;i++){const d=(t+i)%7;if(AERO_DAYS.includes(d))return names[d];}
-  return '\u2014';
+  if(aeroThisWeek().length>=AERO_TARGET)return 'next week';
+  if(aeroYesterday())return 'tomorrow';
+  return 'any day this week';
 }
 function zoneFor(mode){return AERO_MODES[mode].kind==='interval'?ZONE.interval:ZONE.moderate;}
 
@@ -985,7 +1024,10 @@ function renderSession(slot){
         (t.kg?t.kg+'kg':'')+(t.kg?' \u00B7 ':'')+t.reps+'</div>');
     }
     return '<div class="ex"><div class="ex-top"><div class="ex-name">'+h(e.name)+'</div>'+
-      '<div class="ex-target">'+t.sets+' \u00D7 '+h(t.reps)+'<div style="color:var(--t3);font-size:9px;margin-top:2px">1\u20133 reps in reserve</div></div></div>'+
+      '<div class="ex-target">'+t.sets+' \u00D7 '+h(t.reps)+
+        '<div style="color:var(--t3);font-size:9px;margin-top:2px">1\u20133 reps in reserve</div>'+
+        '<div onclick="event.stopPropagation();swapExercise(\''+id+'\')" style="color:var(--t3);font-size:9px;margin-top:5px;cursor:pointer;text-decoration:underline">swap</div>'+
+      '</div></div>'+
       '<div class="ex-note">'+h(e.note||'')+'</div>'+
       (hint?'<div class="ex-hint">\u2191 '+h(hint)+'</div>':'')+
       (secs?'<button class="btn btn-quiet" style="width:100%;margin:9px 0 0" onclick="runHold(\''+id+'\','+secs+')">Start '+secs+'s hold</button>':'')+
@@ -1008,6 +1050,22 @@ function renderSession(slot){
     '<div id="rest-timer"></div>';
 }
 function toggleSess(){DB.set('sess_open_'+TODAY,DB.get('sess_open_'+TODAY)!==true);renderToday();}
+/* Swap one exercise for the next option that trains the same muscle. */
+function swapExercise(id){
+  const d=sessionDraft(),e=EX_DB[id];
+  if(!e)return;
+  const pool=Object.entries(EX_DB).filter(([k,x])=>
+    x.muscle===e.muscle&&k!==id&&!isExcluded(k)&&x.phases.includes(S.phase)&&x.neck_ok!==false&&!d.ids.includes(k)
+  ).map(([k])=>k);
+  if(!pool.length)return toast('No alternative for '+e.muscle+' right now');
+  const next=pool[(DB.get('swap_'+id)||0)%pool.length];
+  DB.set('swap_'+id,(DB.get('swap_'+id)||0)+1);
+  d.ids=d.ids.map(x=>x===id?next:x);
+  delete d.marks[id];
+  if(d.actuals)delete d.actuals[id];
+  saveDraft();renderToday();
+  toast(e.name+' \u2192 '+EX_DB[next].name);
+}
 function setType(t){DB.set('manual_session_type_'+TODAY,t);SESS=null;DB.del('draft_'+TODAY);renderAll();}
 function markSet(id,i){
   const d=sessionDraft();
@@ -1239,10 +1297,13 @@ function renderAerobic(slot){
   if(!isAeroDay()&&!done){
     wrap.innerHTML=lead+'<div class="card"><div class="row">'+
       '<div><div style="font-size:12px">Next block \u00B7 '+nextAeroDay()+'</div>'+
-      '<div class="muted" style="margin-top:3px">Two quality sessions a week \u00B7 Tuesday and Friday</div></div>'+
+      '<div class="muted" style="margin-top:3px">'+
+        (aeroYesterday()?'You did one yesterday \u00B7 a day between blocks':
+         count>=AERO_TARGET?'Both blocks done this week':'Rest day \u2014 pick it up tomorrow')+
+        ' \u00B7 '+daysLeftInWeek()+' day'+(daysLeftInWeek()===1?'':'s')+' left this week</div></div>'+
       '<div class="muted" style="color:'+(count>=AERO_TARGET?'var(--green)':'var(--t3)')+'">'+count+' / '+AERO_TARGET+'</div></div>'+
       '<div class="muted" style="margin-top:11px;padding-top:10px;border-top:1px solid var(--line);line-height:1.6">'+
-      'Frequency is not the lever \u2014 time in the right zone is. Walking stays your low-intensity base and does not count here.</div></div>';
+      'Two a week on any day that suits you \u2014 frequency is not the lever, time in the right zone is. Walking stays your base and does not count here.</div></div>';
     return;
   }
   if(done){
@@ -1282,7 +1343,11 @@ function renderAerobic(slot){
     :aeroMode==='rope'?rope.sets+' \u00D7 '+rope.work+'s \u00B7 90s rest'
     :mins+' min continuous';
 
-  wrap.innerHTML=lead+'<div class="card">'+
+  wrap.innerHTML=lead+
+    (aeroUrgent()?'<div class="note" style="border-color:rgba(251,191,36,.25);background:var(--yd)"><b style="color:var(--yellow)">'+
+      (AERO_TARGET-count)+' block'+((AERO_TARGET-count)===1?'':'s')+' left, '+daysLeftInWeek()+' day'+(daysLeftInWeek()===1?'':'s')+' to go</b>'+
+      '<span class="muted">Good day for it \u2014 the week does not carry over.</span></div>':'')+
+    '<div class="card">'+
     '<div class="modes" style="flex-wrap:wrap">'+btns+'</div>'+
     '<div class="row" style="align-items:flex-start;margin-bottom:11px">'+
       '<div><div style="font-size:14px">'+M.name+'</div>'+
@@ -1685,6 +1750,8 @@ function openSettings(){
         '<div class="step"><div onclick="bumpCore(-1)">\u2212</div><b>'+S.core+'</b><div onclick="bumpCore(1)">+</div></div>')+
       srow('Rest timer',st.restSec+' seconds between sets',
         '<div class="step"><div onclick="bumpRest(-15)">\u2212</div><b style="font-size:14px">'+st.restSec+'</b><div onclick="bumpRest(15)">+</div></div>')+
+      srow('Exercises',excluded().length?excluded().length+' turned off':'All available',
+        '<div class="step"><div onclick="openExercises()" style="width:auto;padding:0 12px;font-size:11px">Manage</div></div>')+
       srow('Pelvic physio cleared','Unlocks jump rope, hollow hold and hanging knee raise',
         '<div class="sw'+(S.pelvic?' on':'')+'" onclick="togglePelvic()"></div>')+
     '</div>'+
@@ -1705,8 +1772,29 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v6.9 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.1 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
+}
+function openExercises(){
+  const groups={};
+  Object.entries(EX_DB).forEach(([id,e])=>{
+    const c=e.muscle==='core'?'core':e.cat;
+    (groups[c]=groups[c]||[]).push([id,e]);
+  });
+  const names={push:'Push',pull:'Pull',legs:'Legs',core:'Core'};
+  openSheet('<div style="padding:0 16px">'+
+    '<div class="sec" style="margin:8px 0 10px">Exercises</div>'+
+    '<div class="muted" style="margin-bottom:12px;line-height:1.6">Switch off anything you cannot do right now. It stays out of the rotation until you switch it back on.</div>'+
+    Object.keys(names).filter(k=>groups[k]).map(k=>
+      '<div class="sec" style="margin:14px 0 8px">'+names[k]+'</div><div class="card" style="margin:0">'+
+      groups[k].sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([id,e])=>{
+        const off=isExcluded(id);
+        return '<div class="srow" style="padding:11px 0">'+
+          '<div><div class="s-l" style="color:'+(off?'var(--t3)':'var(--t1)')+'">'+h(e.name)+'</div>'+
+          '<div class="s-s">'+h(e.muscle)+(e.phases.includes(S.phase)?'':' \u00B7 not in this phase')+'</div></div>'+
+          '<div class="sw'+(off?'':' on')+'" onclick="toggleExcluded(\''+id+'\')"></div></div>';
+      }).join('')+'</div>').join('')+
+    '<div style="height:24px"></div></div>');
 }
 function srow(l,s,ctrl){return '<div class="srow"><div><div class="s-l">'+l+'</div><div class="s-s">'+s+'</div></div>'+ctrl+'</div>';}
 function bumpCore(d){DB.set('core_level_manual',Math.min(5,Math.max(1,S.core+d)));derive();openSettings();renderToday();}
