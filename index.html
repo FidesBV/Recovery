@@ -724,6 +724,8 @@ const ZONE={moderate:[140,148],interval:[152,170],ceiling:179};
 const AERO_MODES={
   shadow:{name:'Shadowboxing',sub:'Continuous \u00B7 no impact, no saddle',gated:false,kind:'steady',
     cue:'Speed sets the heart rate, not force. Bring your legs into it. If you cannot reach 140, move faster rather than harder.'},
+  jog:{name:'Jog / walk',sub:'Outside \u00B7 impact, build slowly',gated:false,kind:'jog',
+    cue:'Two minutes walking, one minute easy jogging. Short strides, land under your hips. Stop if the arch starts talking \u2014 the test is how your foot feels tomorrow morning.'},
   stairs:{name:'Stair intervals',sub:'Hard up \u00B7 slow down is the rest',gated:false,kind:'interval',
     cue:'Whole foot on the tread, shoes on. Hard up, controlled down \u2014 the descent is your recovery, not extra work.'},
   stepup:{name:'Step-ups',sub:'Backup \u00B7 loads calves and foot',gated:false,kind:'steady',
@@ -776,7 +778,18 @@ function nextAeroDay(){
   if(aeroYesterday())return 'tomorrow';
   return 'any day this week';
 }
-function zoneFor(mode){return AERO_MODES[mode].kind==='interval'?ZONE.interval:ZONE.moderate;}
+function zoneFor(mode){
+  const k=AERO_MODES[mode].kind;
+  return k==='interval'?ZONE.interval:k==='jog'?[140,155]:ZONE.moderate;
+}
+/* Walk-jog: hold the same dose for three weeks before changing anything.
+   Connective tissue lags well behind how the session feels. */
+function jogProtocol(){
+  const done=aeroLog().filter(a=>a.mode==='jog').length;
+  const rounds=done<3?6:done<6?7:8;
+  return {rounds,walk:120,jog:60};
+}
+function jogThisWeek(){return aeroThisWeek().filter(a=>a.mode==='jog').length;}
 
 /* ═══ 15. AUDIO + TIMER ═══ */
 let ctx=null,scheduled=[],deadline=0,wake=null;
@@ -1333,14 +1346,17 @@ function renderAerobic(slot){
 
   const btns=Object.entries(AERO_MODES).map(([k,m])=>{
     const gated=m.gated&&locked;
-    const dis=gated||(noIntervals&&m.kind==='interval');
+    const jogUsed=m.kind==='jog'&&jogThisWeek()>=1;
+    const dis=gated||(noIntervals&&m.kind==='interval')||jogUsed;
     return '<button class="'+(k===aeroMode?'on':'')+'"'+(dis?' disabled':'')+
-      ' onclick="'+(dis?(gated?'toast(\'Locked until pelvic physio\')':'toast(\'No intervals on an easy week\')'):'setAero(\''+k+'\')')+
+      ' onclick="'+(dis?(gated?'toast(\'Locked until pelvic physio\')':jogUsed?'toast(\'Once a week while your foot settles\')':'toast(\'No intervals on an easy week\')'):'setAero(\''+k+'\')')+
       '">'+m.name+(gated?' \u{1F512}':'')+'</button>';
   }).join('');
 
+  const jog=jogProtocol();
   const target=aeroMode==='stairs'?stair.rounds+' rounds \u00B7 hard up, slow down'
     :aeroMode==='rope'?rope.sets+' \u00D7 '+rope.work+'s \u00B7 90s rest'
+    :aeroMode==='jog'?jog.rounds+' rounds \u00B7 2 min walk, 1 min jog'
     :mins+' min continuous';
 
   wrap.innerHTML=lead+
@@ -1361,9 +1377,11 @@ function renderAerobic(slot){
     '<div class="muted" style="margin-bottom:12px">'+M.cue+'</div>'+
     (aeroMode==='rope'?'<div class="note" style="margin:0 0 12px;border-color:rgba(248,113,113,.2);background:var(--rd)"><b style="color:var(--red);font-size:9px;letter-spacing:.1em;text-transform:uppercase">Stop immediately on</b><span class="muted">'+ROPE_STOP.map(x=>'\u00B7 '+x).join('<br>')+'</span></div>':'')+
     (aeroMode==='stepup'?'<div class="note" style="margin:0 0 12px;border-color:rgba(251,191,36,.25);background:var(--yd)"><span class="muted">Backup option. Keep it to once a week while your feet are sore \u2014 the descent is what loads the plantar fascia.</span></div>':'')+
-    '<div class="clock" id="ae-clock">'+fmt(aeroMode==='stairs'?stair.work:aeroMode==='rope'?rope.work:mins*60)+'</div>'+
+    (aeroMode==='jog'?'<div class="note" style="margin:0 0 12px;border-color:rgba(251,191,36,.25);background:var(--yd)"><b style="color:var(--yellow)">Once a week, same dose for three weeks</b><span class="muted">Tissue adapts slower than the session feels. The reading that matters is your arch on the first steps out of bed tomorrow \u2014 pain there means stop.</span></div>':'')+
+    '<div class="clock" id="ae-clock">'+fmt(aeroMode==='stairs'?stair.work:aeroMode==='rope'?rope.work:aeroMode==='jog'?jog.walk:mins*60)+'</div>'+
     '<div class="muted" style="text-align:center;margin-bottom:12px" id="ae-sub">'+
-      (aeroMode==='stairs'?'round 1 of '+stair.rounds:aeroMode==='rope'?'set 1 of '+rope.sets:'ready')+'</div>'+
+      (aeroMode==='stairs'?'round 1 of '+stair.rounds:aeroMode==='rope'?'set 1 of '+rope.sets:
+       aeroMode==='jog'?'walk \u00B7 round 1 of '+jog.rounds:'ready')+'</div>'+
     '<div style="display:flex;gap:8px"><button class="btn btn-go" style="width:auto;flex:2;margin:0" id="ae-btn" onclick="aeroToggle()">Start</button>'+
     '<button class="btn" style="width:auto;flex:1;margin:0" onclick="aeroReset()">Reset</button></div>'+
     '<button class="btn" style="width:100%;margin:8px 0 0" onclick="aeroSave()">Log block \u2713</button>'+
@@ -1386,8 +1404,10 @@ function aeroToggle(){
   const b=el('ae-btn'),M=AERO_MODES[aeroMode];
   if(aeroRunning){clearInterval(aeroTimer);aeroRunning=false;cancelAlarm();if(b)b.textContent='Resume';return;}
   const stair=stairProtocol(),rope=ropeProtocol();
+  const jog=jogProtocol();
   if(!aeroLeft){
-    aeroLeft=aeroMode==='stairs'?stair.work:aeroMode==='rope'?rope.work:aeroMinutes()*60;
+    aeroLeft=aeroMode==='stairs'?stair.work:aeroMode==='rope'?rope.work
+      :aeroMode==='jog'?jog.walk:aeroMinutes()*60;
   }
   aeroRunning=true;if(b)b.textContent='Pause';keepAwake(true);
   const ok=scheduleAlarm(aeroLeft);
@@ -1411,6 +1431,16 @@ function aeroToggle(){
         if(sub)sub.textContent='round '+ropeSet+' of '+stair.rounds+' \u00B7 hard up';
       }
       aeroRunning=false;aeroToggle();
+    }else if(aeroMode==='jog'){
+      if(ropePhase==='work'){          // 'work' means the walking part here
+        ropePhase='rest';aeroLeft=jog.jog;
+        if(sub)sub.textContent='jog \u00B7 round '+ropeSet+' of '+jog.rounds;
+      }else{
+        if(ropeSet>=jog.rounds){aeroRunning=false;return aeroDone();}
+        ropeSet++;ropePhase='work';aeroLeft=jog.walk;
+        if(sub)sub.textContent='walk \u00B7 round '+ropeSet+' of '+jog.rounds;
+      }
+      aeroRunning=false;aeroToggle();
     }else if(aeroMode==='rope'){
       if(ropePhase==='work'){
         if(ropeSet>=rope.sets){aeroRunning=false;return aeroDone();}
@@ -1426,8 +1456,10 @@ function aeroToggle(){
 }
 function aeroSave(){
   const rope=ropeProtocol(),stair=stairProtocol();
+  const jog=jogProtocol();
   const mins=aeroMode==='rope'?Math.round(rope.sets*rope.work/6)/10
     :aeroMode==='stairs'?Math.round(stair.rounds*(stair.work+stair.rest)/60)
+    :aeroMode==='jog'?Math.round(jog.rounds*(jog.walk+jog.jog)/60)
     :aeroMinutes();
   openSheet('<div style="padding:0 20px"><div style="font-size:15px;margin-bottom:6px">Any pelvic symptoms?</div>'+
     '<div class="muted" style="margin-bottom:16px">Heaviness, bearing down, urgency or leakage — during or right after the block.</div>'+
@@ -1772,7 +1804,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.1 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.2 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 function openExercises(){
