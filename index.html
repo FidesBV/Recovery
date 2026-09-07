@@ -697,6 +697,28 @@ function targetFor(id){
   return {sets,reps,kg:e.bw?0:(kg||e.kg)};
 }
 
+/* What you actually lifted last time, so you are not guessing. */
+function lastPerformance(id){
+  const hits=sessions().filter(x=>x.date!==TODAY&&x.exercises&&x.exercises[id]);
+  for(let i=hits.length-1;i>=0;i--){
+    const sets=hits[i].exercises[id].filter(y=>y.done);
+    if(sets.length)return {date:hits[i].date,sets:sets};
+  }
+  return null;
+}
+function lastLine(id){
+  const p=lastPerformance(id);
+  if(!p)return '';
+  const e=EX_DB[id];
+  const parts=p.sets.map(x=>{
+    const r=x.reps||0;
+    if(e&&e.bw)return String(r);
+    return (x.kg?x.kg+'kg':'')+(x.kg?'\u00D7':'')+r;
+  });
+  const ago=daysBetween(p.date,TODAY);
+  return 'Last: '+parts.join(', ')+' \u00B7 '+(ago===1?'yesterday':ago+' days ago');
+}
+
 /* ═══ 13. PROGRESSION — decoupled from HRV ═══ */
 function progressionHint(id){
   const log=sessions().filter(s=>s.exercises&&s.exercises[id]).slice(-2);
@@ -1075,6 +1097,7 @@ function renderSession(slot){
         '<div onclick="event.stopPropagation();swapExercise(\''+id+'\')" style="color:var(--t3);font-size:9px;margin-top:5px;cursor:pointer;text-decoration:underline">swap</div>'+
       '</div></div>'+
       '<div class="ex-note">'+h(e.note||'')+'</div>'+
+      (lastLine(id)?'<div class="ex-note" style="color:var(--t2);margin-top:5px">'+h(lastLine(id))+'</div>':'')+
       (hint?'<div class="ex-hint">\u2191 '+h(hint)+'</div>':'')+
       (secs?'<button class="btn btn-quiet" style="width:100%;margin:9px 0 0" onclick="runHold(\''+id+'\','+secs+')">Start '+secs+'s hold</button>':'')+
       '<div class="sets">'+sets.join('')+'</div></div>';
@@ -1168,7 +1191,8 @@ function guideShow(){
   }
   el('g-phase').textContent='Set '+s.set+' of '+s.sets;el('g-phase').className='g-phase';
   el('g-name').textContent=e.name;
-  el('g-note').textContent=e.note||'';
+  const ll=lastLine(s.id);
+  el('g-note').innerHTML=h(e.note||'')+(ll?'<div style="color:var(--t3);font-size:11px;margin-top:7px">'+h(ll)+'</div>':'');
   const a=actual(s.id,s.set-1);
   const unit=a.timed?'Seconds':(/steps/.test(String(s.target))?'Steps':'Reps');
   el('g-target').innerHTML='<div class="muted">planned '+h(s.target)+' \u00B7 stop 1\u20133 reps short of failure</div><div class="g-adj">'+
@@ -1306,8 +1330,9 @@ function saveSession(){
   DB.set('session_log',log);
   const pw=DB.get('prev_weights')||{};
   d.ids.forEach(id=>{
-    const a=d.actuals&&d.actuals[id]&&d.actuals[id][0];
-    const kg=a&&a.kg?a.kg:targetFor(id).kg;
+    // the top set you actually completed, not whatever set one happened to be
+    const done=(ex[id]||[]).filter(x=>x.done&&x.kg>0).map(x=>x.kg);
+    const kg=done.length?Math.max.apply(null,done):targetFor(id).kg;
     if(kg)pw[id]=kg;
   });
   DB.set('prev_weights',pw);
@@ -1845,7 +1870,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.4 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.5 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
