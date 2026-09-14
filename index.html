@@ -594,8 +594,11 @@ function toggleExcluded(id){
   derive();renderToday();openExercises();
 }
 
-const CORE_POOL=['dead_bug','bird_dog','plank','side_plank','hollow_hold','hang_knee','farmer_carry','suitcase_carry'];
-const FAMILY={farmer_carry:'carry',suitcase_carry:'carry',plank:'plank',side_plank:'plank',
+EX_DB.ab_roller={name:'Ab roller',cat:'core',muscle:'core',eq:['roller'],phases:[1,2,3],
+  sets:{1:3,2:3,3:3},reps:{1:'6',2:'8',3:'10'},kg:0,bw:true,neck_ok:true,
+  note:'From your knees. Roll out only as far as your lower back stays flat, breathe out on the way out \u2014 never hold and brace'};
+const CORE_POOL=['dead_bug','bird_dog','plank','side_plank','hollow_hold','hang_knee','farmer_carry','suitcase_carry','ab_roller'];
+const FAMILY={farmer_carry:'carry',suitcase_carry:'carry',plank:'plank',side_plank:'plank',ab_roller:'antiext',
   hollow_hold:'flexion',hang_knee:'flexion',dead_bug:'antiext',bird_dog:'antiext'};
 /* One per muscle, compounds first. Isolation only if there is room. */
 const MUSCLE_ORDER={
@@ -762,7 +765,8 @@ function aeroWeek(){
 }
 /* Two quality sessions a week. More frequency is not the lever;
    time spent in the right zone is. */
-const AERO_TARGET=2;
+function aeroTargetCount(){const n=DB.get('aero_target');return (n&&n>=2&&n<=5)?n:2;}
+Object.defineProperty(window,'AERO_TARGET',{get:function(){return aeroTargetCount();}});
 function aeroMinutes(){
   const w=aeroWeek();
   let m=w<=2?20:w<=4?25:30;
@@ -778,8 +782,10 @@ function aeroThisWeek(){const ws=weekStart();return aeroLog().filter(e=>e.date>=
 function daysLeftInWeek(){return 7-((new Date(TODAY).getDay()+6)%7);}
 function aeroOpen(){
   if(aeroThisWeek().length>=AERO_TARGET)return false;
-  if(aeroYesterday())return false;
   if(S.verdict&&S.verdict.k==='rest'&&!S.verdict.soft)return false;
+  // Back-to-back days only block you at the lower targets; at 4 or 5 a
+  // week they are unavoidable and fine at moderate intensity.
+  if(AERO_TARGET<=3&&aeroYesterday())return false;
   return true;
 }
 function aeroUrgent(){
@@ -1404,7 +1410,7 @@ function renderAerobic(slot){
 
   const btns=Object.entries(AERO_MODES).map(([k,m])=>{
     const gated=m.gated&&locked;
-    const jogUsed=(m.kind==='jog'||m.kind==='jogwalk')&&jogThisWeek()>=1;
+    const jogUsed=(m.kind==='jog'||m.kind==='jogwalk')&&jogThisWeek()>=Math.max(1,AERO_TARGET-1);
     const dis=gated||(noIntervals&&m.kind==='interval')||jogUsed;
     return '<button class="'+(k===aeroMode?'on':'')+'"'+(dis?' disabled':'')+
       ' onclick="'+(dis?(gated?'toast(\'Locked until pelvic physio\')':jogUsed?'toast(\'Once a week while your foot settles\')':'toast(\'No intervals on an easy week\')'):'setAero(\''+k+'\')')+
@@ -1722,34 +1728,39 @@ function renderProgress(){
         '<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+Math.round(v/m*100)+'%;background:var(--t2)"></div></div></div>').join('')+
       '</div>'+
       '<div class="sec">Your own correlations</div>'+renderPatterns()+
-      '<div class="sec">Looking back</div>'+buildRetrospect()+
       '<div class="sec">Summary</div><div class="card">'+
       '<div class="muted" style="margin-bottom:10px">Thirty days of numbers in one block, for a full analysis elsewhere.</div>'+
       '<button class="btn" style="width:100%;margin:0" onclick="showMonthly()">Build 30-day summary</button></div>';
   } else if(progTab==='body'){
     const w=(DB.get('weight_log')||[]),bpl=(DB.get('bp_log')||[]);
-    const log=realSessions().slice(-40),byEx={};
-    log.forEach(x=>Object.entries(x.exercises||{}).forEach(([id,sets])=>{
-      const kg=Math.max(...sets.map(y=>+y.kg||0));if(kg>0)(byEx[id]=byEx[id]||[]).push(kg);}));
-    const rows=Object.entries(byEx).map(([id,v])=>{
-      const e=EX_DB[id];if(!e)return '';
-      const d=v[v.length-1]-v[0];
-      return '<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)"><span>'+h(e.name)+'</span>'+
-        '<span class="muted">'+v[v.length-1]+' kg'+(d?' <span style="color:'+(d>0?'var(--green)':'var(--t3)')+'">'+(d>0?'+':'')+d.toFixed(1)+'</span>':'')+'</span></div>';
-    }).join('');
+    const kg=w.length?w[w.length-1].kg:0;
+    const kgFirst=w.length?w[0].kg:0;
+    const bp=bpl.length?bpl[bpl.length-1]:null;
+    const wk=weekMet(0);
+    const vol=weeklyVolume(0);
+    const under=Object.entries(vol).filter(([k,v])=>v<VOL_BAND[0]).map(([k])=>k);
+
+    // one line that answers "is the training side on track"
+    const verdict=[
+      wk.str>=2?'strength on track':'only '+wk.str+' strength session'+(wk.str===1?'':'s')+' this week',
+      wk.aer>=AERO_TARGET?'aerobic done':wk.aer+'/'+AERO_TARGET+' aerobic blocks'
+    ].join(' \u00B7 ');
+
     b.innerHTML=
-      (w.length?metricCard('Weight',w[w.length-1].kg,'kg',w.map(r=>r.kg),'down',1)
-        :'<div class="metric"><div class="m-name">Weight</div><div class="muted" style="margin-top:6px">Log it under Today</div></div>')+
-      '<div class="sec">Blood pressure</div><div class="card">'+
-      (bpl.length?bpl.slice(-6).reverse().map(r=>'<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="muted">'+r.date+'</span><span>'+r.sys+' / '+r.dia+'</span></div>').join(''):'<div class="muted">No readings yet</div>')+'</div>'+
-      '<div class="sec">Core level</div><div class="card"><div class="row"><div>Level '+S.core+'</div><div class="muted">'+CORE_LEVELS[S.core].label+'</div></div>'+
-      '<div class="muted" style="margin-top:6px">'+CORE_LEVELS[S.core].sets+' \u00D7 '+CORE_LEVELS[S.core].secs+'s holds \u00B7 '+CORE_LEVELS[S.core].reps+' reps \u00B7 '+CORE_LEVELS[S.core].steps+' step carries</div></div>'+
+      '<div class="card" style="margin-bottom:12px"><div class="muted" style="line-height:1.6">'+h(verdict)+'</div></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:0 16px 12px">'+
+        miniTile('Weight',kg?kg.toFixed(1):'\u2014','kg',kg&&kgFirst?+(kg-kgFirst).toFixed(1):null,'down')+
+        miniTile('Blood pressure',bp?bp.sys+'/'+bp.dia:'\u2014','',null,'')+
+        miniTile('Core level',S.core,CORE_LEVELS[S.core].label,null,'')+
+      '</div>'+
+      (w.length>1?'<div class="metric" style="padding:12px 14px"><canvas id="c-wt" style="height:56px"></canvas>'+
+        '<div class="row" style="margin-top:6px"><span class="muted">'+w[0].date+'</span>'+
+        '<span class="muted">'+w.length+' readings</span></div></div>':'')+
       '<div class="sec">Sets per muscle this week</div>'+volumePanel()+
-      '<div class="sec">Working weights</div><div class="card">'+(rows||'<div class="muted">Log a few sessions first</div>')+'</div>'+
-      '<div class="sec">Volume</div><div class="card">'+
-      '<div class="row"><span class="muted">Sessions logged</span><span>'+realSessions().length+'</span></div>'+
-      '<div class="row" style="margin-top:8px"><span class="muted">Aerobic blocks</span><span>'+aeroLog().length+'</span></div>'+
-      '<div class="row" style="margin-top:8px"><span class="muted">Current phase</span><span>'+PHASE_NAME[S.phase]+'</span></div></div>';
+      (under.length?'<div class="card"><div class="muted" style="line-height:1.6">Behind the 8-set band: '+h(under.join(', '))+'</div></div>':'')+
+      '<div class="sec">Working weights</div>'+weightsTable();
+
+    if(w.length>1)setTimeout(()=>{const c=el('c-wt');if(c){c.dataset.h=56;sparkline('c-wt',w.map(r=>r.kg),'#9A9AA5');}},0);
   }
 }
 
@@ -1785,6 +1796,39 @@ function scoreCard(){
       '<span class="muted" style="font-size:9px;color:var(--yellow)">\u25A0 55\u201374</span>'+
       '<span class="muted" style="font-size:9px;color:var(--green)">\u25A0 75+</span></div>'+
     '</div>';
+}
+function miniTile(label,val,unit,delta,better){
+  let col='var(--t2)',extra='';
+  if(delta!==null&&delta!==undefined&&Math.abs(delta)>=0.3){
+    const good=better==='down'?delta<0:delta>0;
+    col=good?'var(--green)':'var(--red)';
+    extra='<div style="color:'+col+';font-size:10px;margin-top:3px">'+(delta>0?'+':'')+delta.toFixed(1)+'</div>';
+  }
+  return '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:11px 10px">'+
+    '<div class="muted" style="font-size:8px;letter-spacing:.1em;text-transform:uppercase">'+label+'</div>'+
+    '<div style="font-family:\'Instrument Serif\',serif;font-size:20px;margin-top:4px">'+val+
+      (unit?'<span style="font-size:9px;color:var(--t3)"> '+unit+'</span>':'')+'</div>'+extra+'</div>';
+}
+/* Only exercises you have actually loaded, newest first. */
+function weightsTable(){
+  const log=realSessions().slice(-30),byEx={};
+  log.forEach(x=>Object.entries(x.exercises||{}).forEach(([id,sets])=>{
+    const done=sets.filter(y=>y.done&&y.kg>0).map(y=>y.kg);
+    if(done.length)(byEx[id]=byEx[id]||[]).push({d:x.date,kg:Math.max.apply(null,done)});
+  }));
+  const rows=Object.entries(byEx).map(([id,v])=>{
+    const e=EX_DB[id];if(!e)return '';
+    const now=v[v.length-1],first=v[0];
+    const d=now.kg-first.kg;
+    return {name:e.name,kg:now.kg,d:d,date:now.d};
+  }).filter(Boolean).sort((a,b)=>b.date.localeCompare(a.date));
+  if(!rows.length)return '<div class="card"><div class="muted">Log a few loaded sessions first.</div></div>';
+  return '<div class="card">'+rows.map(r=>
+    '<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">'+
+    '<span style="font-size:11px">'+h(r.name)+'</span>'+
+    '<span style="font-size:11px">'+r.kg+' kg'+
+      (Math.abs(r.d)>=0.5?' <span style="color:'+(r.d>0?'var(--green)':'var(--t3)')+'">'+(r.d>0?'+':'')+r.d.toFixed(1)+'</span>':'')+
+    '</span></div>').join('')+'</div>';
 }
 function volumePanel(){
   const now=weeklyVolume(0),prev=weeklyVolume(1);
@@ -1847,6 +1891,8 @@ function openSettings(){
         '<div class="step"><div onclick="bumpCore(-1)">\u2212</div><b>'+S.core+'</b><div onclick="bumpCore(1)">+</div></div>')+
       srow('Rest timer',st.restSec+' seconds between sets',
         '<div class="step"><div onclick="bumpRest(-15)">\u2212</div><b style="font-size:14px">'+st.restSec+'</b><div onclick="bumpRest(15)">+</div></div>')+
+      srow('Aerobic blocks per week',AERO_TARGET+' a week'+(AERO_TARGET>=4?' \u00B7 back-to-back days allowed':' \u00B7 a day between blocks'),
+        '<div class="step"><div onclick="bumpAero(-1)">\u2212</div><b>'+AERO_TARGET+'</b><div onclick="bumpAero(1)">+</div></div>')+
       srow('Exercises',excluded().length?excluded().length+' turned off':'All available',
         '<div class="step"><div onclick="openExercises()" style="width:auto;padding:0 12px;font-size:11px">Manage</div></div>')+
       srow('Pelvic physio cleared','Unlocks jump rope, hollow hold and hanging knee raise',
@@ -1870,7 +1916,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.5 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.6 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -1981,6 +2027,10 @@ function openExercises(){
     '<div style="height:24px"></div></div>');
 }
 function srow(l,s,ctrl){return '<div class="srow"><div><div class="s-l">'+l+'</div><div class="s-s">'+s+'</div></div>'+ctrl+'</div>';}
+function bumpAero(d){
+  DB.set('aero_target',Math.min(5,Math.max(2,AERO_TARGET+d)));
+  derive();openSettings();renderToday();
+}
 function bumpCore(d){DB.set('core_level_manual',Math.min(5,Math.max(1,S.core+d)));derive();openSettings();renderToday();}
 function bumpRest(d){const st=DB.get('settings')||{restSec:90};st.restSec=Math.min(300,Math.max(30,(st.restSec||90)+d));DB.set('settings',st);openSettings();}
 function togglePelvic(){DB.set('pelvic_pt_done',!S.pelvic);derive();openSettings();renderToday();toast(S.pelvic?'Unlocked':'Locked');}
