@@ -359,7 +359,7 @@ function derive(){
     vo2:last(vo2V), vo2First:vo2V.length?vo2V[0]:0, vo2V,
     tempDev:tempV.length>=8?+(last(tempV)-median(tempV.slice(0,-1))).toFixed(2):0,
     consec:consecutiveTraining(), phase:confirmPhase(hrvV),
-    core:coreLevel(), deload:deloadWeek(), pelvic:DB.get('pelvic_pt_done')===true
+    core:coreLevel(), deload:deloadWeek(), pelvic:true
   };
   S.verdict=decideDay();
   S.score=calcScore();
@@ -606,14 +606,13 @@ const MUSCLE_ORDER={
   pull:['back','biceps'],
   legs:['quads','hamstrings','glutes','calves']
 };
-const PRESSURE_GATED=['hollow_hold','hang_knee'];
+
 const ROTATION=['push','pull','legs'];
 
 function coreAvailable(){
   return CORE_POOL.filter(id=>{
     const e=EX_DB[id];if(!e)return false;
     if(isExcluded(id))return false;
-    if(PRESSURE_GATED.includes(id)&&!S.pelvic)return false;
     return e.phases.includes(S.phase);
   });
 }
@@ -753,10 +752,10 @@ const AERO_MODES={
     cue:'Two minutes walking, one minute easy jogging. Use this on days the arch is talking \u2014 the walking breaks let it recover mid-session.'},
   stepup:{name:'Step-ups',sub:'Indoors \u00B7 no ground impact',gated:false,kind:'steady',
     cue:'Whole foot on the step, drive through the heel, step down slowly. The descent is what loads the plantar fascia.'},
-  rope:{name:'Jump rope',sub:'Interval protocol \u00B7 high impact',gated:true,kind:'interval',
-    cue:'Jump low, land forefoot, knees soft. Breathe in rhythm \u2014 never hold and brace.'}
+  rope:{name:'Jump rope',sub:'Intervals \u00B7 builds calf tolerance',gated:false,kind:'interval',
+    cue:'Jump low, land forefoot, knees soft, keep breathing. Calves and achilles adapt slower than your heart does \u2014 the block length is the thing to respect.'}
 };
-const ROPE_STOP=['Heavy or bearing-down feeling low in the pelvis','Any urgency or leakage','Calf or achilles pain still there after 48h'];
+const ROPE_STOP=['Sharp pain in the achilles or heel','Calf pain still there after 48 hours','Form falling apart \u2014 landing heavy or heels touching down'];
 
 function aeroLog(){return DB.get('aero_log')||[];}
 function aeroWeek(){
@@ -774,7 +773,25 @@ function aeroMinutes(){
   return m;
 }
 /* Stair intervals: rounds of hard-up / slow-down. */
-function ropeProtocol(){const w=aeroWeek();return w<=1?{sets:3,work:30}:w<=2?{sets:4,work:45}:w<=3?{sets:5,work:60}:{sets:6,work:60};}
+/* Progression for someone without complaints: block length first,
+   then number of blocks. Two to three hard rope sessions a week at
+   most \u2014 calves and achilles set the pace, not your lungs. */
+const ROPE_STEPS=[
+  {sets:4,work:60,rest:60,  note:'Four one-minute blocks. Stop here for three sessions.'},
+  {sets:5,work:60,rest:60,  note:'Five blocks of a minute.'},
+  {sets:4,work:90,rest:60,  note:'Blocks go to 90 seconds.'},
+  {sets:4,work:120,rest:60, note:'Two-minute blocks \u2014 this is where it starts to bite.'},
+  {sets:4,work:180,rest:60, note:'Three minutes per block, the real VO2max dose.'},
+  {sets:4,work:240,rest:90, note:'Four-minute blocks. No need to go beyond this.'}
+];
+function ropeDone(){return aeroLog().filter(a=>a.mode==='rope').length;}
+function ropeStep(){return Math.min(ROPE_STEPS.length-1,Math.floor(ropeDone()/3));}
+function ropeProtocol(){
+  const st=ROPE_STEPS[ropeStep()];
+  return {sets:st.sets,work:st.work,rest:st.rest,note:st.note,
+    left:3-(ropeDone()%3),step:ropeStep()+1,steps:ROPE_STEPS.length};
+}
+function ropeThisWeek(){return aeroThisWeek().filter(a=>a.mode==='rope').length;}
 function weekStart(){const d=new Date(TODAY);d.setDate(d.getDate()-((d.getDay()+6)%7));return iso(d);}
 function aeroThisWeek(){const ws=weekStart();return aeroLog().filter(e=>e.date>=ws);}
 /* Two blocks a week, on whichever days suit you. The only hard rule is
@@ -1389,7 +1406,7 @@ function renderAerobic(slot){
     wrap.innerHTML=lead+'<div class="card" style="border-color:rgba(74,222,128,.25);background:var(--gd)">'+
       '<div style="color:var(--green);font-size:13px">Done \u2713 '+h(m.name)+'</div>'+
       '<div class="muted" style="margin-top:4px">'+e.minutes+' min \u00B7 '+count+' / '+AERO_TARGET+' this week'+
-      (e.pelvic?' \u00B7 <span style="color:var(--yellow)">pelvic symptoms logged</span>':'')+'</div></div>';
+      (e.pelvic?' \u00B7 <span style="color:var(--yellow)">flagged</span>':'')+'</div></div>';
     return;
   }
   if(S.verdict.k==='rest'&&!S.verdict.soft){
@@ -1399,7 +1416,7 @@ function renderAerobic(slot){
     return;
   }
 
-  const locked=!S.pelvic;
+  const locked=false;
   const noIntervals=S.verdict.k==='deload'||S.verdict.k==='ease';
   if(noIntervals&&AERO_MODES[aeroMode].kind==='interval')aeroMode='stepup';
   const M=AERO_MODES[aeroMode];
@@ -1413,12 +1430,12 @@ function renderAerobic(slot){
     const jogUsed=(m.kind==='jog'||m.kind==='jogwalk')&&jogThisWeek()>=Math.max(1,AERO_TARGET-1);
     const dis=gated||(noIntervals&&m.kind==='interval')||jogUsed;
     return '<button class="'+(k===aeroMode?'on':'')+'"'+(dis?' disabled':'')+
-      ' onclick="'+(dis?(gated?'toast(\'Locked until pelvic physio\')':jogUsed?'toast(\'Once a week while your foot settles\')':'toast(\'No intervals on an easy week\')'):'setAero(\''+k+'\')')+
+      ' onclick="'+(dis?(jogUsed?'toast(\'Jog quota used this week\')':'toast(\'No intervals on an easy week\')'):'setAero(\''+k+'\')')+
       '">'+m.name+(gated?' \u{1F512}':'')+'</button>';
   }).join('');
 
   const jog=jogProtocol();
-  const target=aeroMode==='rope'?rope.sets+' \u00D7 '+rope.work+'s \u00B7 90s rest'
+  const target=aeroMode==='rope'?rope.sets+' \u00D7 '+(rope.work>=60?(rope.work/60)+' min':rope.work+'s')+' \u00B7 '+rope.rest+'s rest'
     :aeroMode==='jogwalk'?jog.rounds+' rounds \u00B7 2 min walk, 1 min jog'
     :aeroMode==='jog'?jogMinutes()+' min continuous'
     :mins+' min continuous';
@@ -1439,7 +1456,11 @@ function renderAerobic(slot){
     (S.verdict.k==='ease'?'<div class="note" style="margin:0 0 11px;border-color:rgba(251,191,36,.25);background:var(--yd);color:var(--yellow);text-align:center;font-size:10px">Eased day \u2014 keep it moderate, skip the intervals</div>':'')+
     (S.verdict.k==='deload'?'<div class="note" style="margin:0 0 11px;border-color:rgba(125,166,240,.28);background:rgba(125,166,240,.08);color:var(--blue);text-align:center;font-size:10px">Deload week \u2014 moderate only, ceiling 148 bpm</div>':'')+
     '<div class="muted" style="margin-bottom:12px">'+M.cue+'</div>'+
-    (aeroMode==='rope'?'<div class="note" style="margin:0 0 12px;border-color:rgba(248,113,113,.2);background:var(--rd)"><b style="color:var(--red);font-size:9px;letter-spacing:.1em;text-transform:uppercase">Stop immediately on</b><span class="muted">'+ROPE_STOP.map(x=>'\u00B7 '+x).join('<br>')+'</span></div>':'')+
+    (aeroMode==='rope'?'<div class="note" style="margin:0 0 12px;border-color:var(--line);background:var(--bg3)">'+
+      '<b style="font-weight:400">Step '+rope.step+' of '+rope.steps+' \u00B7 '+rope.left+' more session'+(rope.left===1?'':'s')+' here</b>'+
+      '<span class="muted">'+h(rope.note)+' Two to three rope sessions a week, never on consecutive days \u2014 calves and achilles need 48 hours.</span></div>'+
+      (ropeThisWeek()>=3?'<div class="note" style="margin:0 0 12px;border-color:rgba(251,191,36,.25);background:var(--yd)"><span class="muted">Third rope session this week \u2014 make the next one something else.</span></div>':'')+
+      '<div class="note" style="margin:0 0 12px;border-color:rgba(248,113,113,.2);background:var(--rd)"><b style="color:var(--red);font-size:9px;letter-spacing:.1em;text-transform:uppercase">Stop on</b><span class="muted">'+ROPE_STOP.map(x=>'\u00B7 '+x).join('<br>')+'</span></div>':'')+
     (aeroMode==='stepup'?'<div class="note" style="margin:0 0 12px;border-color:rgba(251,191,36,.25);background:var(--yd)"><span class="muted">Backup option. Keep it to once a week while your feet are sore \u2014 the descent is what loads the plantar fascia.</span></div>':'')+
     ((aeroMode==='jog'||aeroMode==='jogwalk')?'<div class="note" style="margin:0 0 12px;border-color:rgba(251,191,36,.25);background:var(--yd)"><b style="color:var(--yellow)">'+
       (aeroMode==='jog'?(jogHeldFor()?'Holding at '+jogMinutes()+' min for '+jogHeldFor()+' more session'+(jogHeldFor()===1?'':'s'):'Next step: +10% a week, now '+jogMinutes()+' min'):'Once a week')+
@@ -1452,7 +1473,7 @@ function renderAerobic(slot){
     '<div style="display:flex;gap:8px"><button class="btn btn-go" style="width:auto;flex:2;margin:0" id="ae-btn" onclick="aeroToggle()">Start</button>'+
     '<button class="btn" style="width:auto;flex:1;margin:0" onclick="aeroReset()">Reset</button></div>'+
     '<button class="btn" style="width:100%;margin:8px 0 0" onclick="aeroSave()">Log block \u2713</button>'+
-    (locked?'<div class="muted" style="margin-top:10px">\u{1F512} Jump rope unlocks once the pelvic physio has assessed you. Toggle in Settings.</div>':'')+
+''+
     '</div>';
 }
 function aeroDone(){
@@ -1515,11 +1536,11 @@ function aeroToggle(){
     }else if(aeroMode==='rope'){
       if(ropePhase==='work'){
         if(ropeSet>=rope.sets){aeroRunning=false;return aeroDone();}
-        ropePhase='rest';aeroLeft=90;
-        if(sub)sub.textContent='rest \u00B7 next set '+(ropeSet+1)+' of '+rope.sets;
+        ropePhase='rest';aeroLeft=rope.rest;
+        if(sub)sub.textContent='rest \u00B7 next block '+(ropeSet+1)+' of '+rope.sets;
       }else{
         ropeSet++;ropePhase='work';aeroLeft=rope.work;
-        if(sub)sub.textContent='set '+ropeSet+' of '+rope.sets;
+        if(sub)sub.textContent='block '+ropeSet+' of '+rope.sets;
       }
       aeroRunning=false;aeroToggle();
     }else{aeroRunning=false;aeroDone();}
@@ -1528,11 +1549,11 @@ function aeroToggle(){
 function aeroSave(){
   const rope=ropeProtocol();
   const jog=jogProtocol();
-  const mins=aeroMode==='rope'?Math.round(rope.sets*rope.work/6)/10
+  const mins=aeroMode==='rope'?Math.round(rope.sets*(rope.work+rope.rest)/60)
     :aeroMode==='jogwalk'?Math.round(jog.rounds*(jog.walk+jog.jog)/60)
     :aeroMode==='jog'?jogMinutes()
     :aeroMinutes();
-  openSheet('<div style="padding:0 20px"><div style="font-size:15px;margin-bottom:6px">Any pelvic symptoms?</div>'+
+  openSheet('<div style="padding:0 20px"><div style="font-size:15px;margin-bottom:6px">Anything flare up?</div>'+
     '<div class="muted" style="margin-bottom:16px">Heaviness, bearing down, urgency or leakage — during or right after the block.</div>'+
     '<div style="display:flex;gap:8px"><button class="btn" style="width:auto;flex:1;margin:0" onclick="aeroConfirm(false,'+mins+')">No</button>'+
     '<button class="btn" style="width:auto;flex:1;margin:0;background:var(--yd);border-color:rgba(251,191,36,.35);color:var(--yellow)" onclick="aeroConfirm(true,'+mins+')">Yes</button></div></div>');
@@ -1895,8 +1916,6 @@ function openSettings(){
         '<div class="step"><div onclick="bumpAero(-1)">\u2212</div><b>'+AERO_TARGET+'</b><div onclick="bumpAero(1)">+</div></div>')+
       srow('Exercises',excluded().length?excluded().length+' turned off':'All available',
         '<div class="step"><div onclick="openExercises()" style="width:auto;padding:0 12px;font-size:11px">Manage</div></div>')+
-      srow('Pelvic physio cleared','Unlocks jump rope, hollow hold and hanging knee raise',
-        '<div class="sw'+(S.pelvic?' on':'')+'" onclick="togglePelvic()"></div>')+
     '</div>'+
     '<div class="sec">Health data</div>'+
     '<div class="card" style="margin:0 0 10px">'+
@@ -1916,7 +1935,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.6 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.7 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -2033,7 +2052,7 @@ function bumpAero(d){
 }
 function bumpCore(d){DB.set('core_level_manual',Math.min(5,Math.max(1,S.core+d)));derive();openSettings();renderToday();}
 function bumpRest(d){const st=DB.get('settings')||{restSec:90};st.restSec=Math.min(300,Math.max(30,(st.restSec||90)+d));DB.set('settings',st);openSettings();}
-function togglePelvic(){DB.set('pelvic_pt_done',!S.pelvic);derive();openSettings();renderToday();toast(S.pelvic?'Unlocked':'Locked');}
+
 function pasteImport(){
   if(!navigator.clipboard||!navigator.clipboard.readText)return manualImport();
   navigator.clipboard.readText()
@@ -2215,7 +2234,7 @@ function monthlySummary(){
     training:{sessions:train.length,skipped:sess.filter(s=>s.skipped).length,rest:sess.filter(s=>s.type==='rest').length,
       split:{push:train.filter(s=>s.type==='push').length,pull:train.filter(s=>s.type==='pull').length,legs:train.filter(s=>s.type==='legs').length},
       aerobicBlocks:aero.length,aerobicMinutes:+aero.reduce((a,b)=>a+(b.minutes||0),0).toFixed(0),
-      pelvicSymptomsLogged:aero.filter(a=>a.pelvic).length},
+      blocksFlagged:aero.filter(a=>a.pelvic).length},
     dayStates:st,
     phase:S.phase,coreLevel:S.core,
     weight:wt.length?{latest:wt[wt.length-1].kg,change:+(wt[wt.length-1].kg-wt[0].kg).toFixed(1),readings:wt.length}:null,
