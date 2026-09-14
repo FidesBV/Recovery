@@ -764,7 +764,7 @@ function aeroWeek(){
 }
 /* Two quality sessions a week. More frequency is not the lever;
    time spent in the right zone is. */
-function aeroTargetCount(){const n=DB.get('aero_target');return (n&&n>=2&&n<=5)?n:2;}
+function aeroTargetCount(){const n=DB.get('aero_target');return (n&&n>=2&&n<=5)?n:3;}
 Object.defineProperty(window,'AERO_TARGET',{get:function(){return aeroTargetCount();}});
 function aeroMinutes(){
   const w=aeroWeek();
@@ -1935,7 +1935,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.7 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.8 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
