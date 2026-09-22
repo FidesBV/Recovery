@@ -339,6 +339,104 @@ function deloadWeek(){
 
 /* ═══ 8. DERIVED STATE ═══ */
 let S={};
+/* ═══ PERSONAL BANDS ═══
+   Your 7-day average against your own 60-day normal (mean \u00B1 0.5 SD,
+   the smallest worthwhile change). HRV is compared on a log scale, as in
+   the Plews and Altini methods. "Normal is good" \u2014 inside the band is
+   the healthy signal, not a number that has to keep rising. */
+function winVals(ser,end,len){const from=addDays(end,-len+1);return ser.filter(e=>e[0]>=from&&e[0]<=end).map(e=>e[1]);}
+function bandStats(arr,log){
+  const v=arr.filter(x=>x>0).map(x=>log?Math.log(x):x);
+  if(v.length<14)return null;
+  const m=v.reduce((a,b)=>a+b,0)/v.length;
+  const sd=Math.sqrt(v.reduce((a,x)=>a+(x-m)*(x-m),0)/(v.length-1));
+  return {m,sd:Math.max(sd,log?0.02:0.3),n:v.length,log:!!log};
+}
+function zOf(val,st){if(!st||!val)return null;return ((st.log?Math.log(val):val)-st.m)/st.sd;}
+function bandOf(st){if(!st)return null;const lo=st.m-0.5*st.sd,hi=st.m+0.5*st.sd;return st.log?[Math.exp(lo),Math.exp(hi)]:[lo,hi];}
+/* inside the band ~0.75-0.85; a little more above it; falls away below */
+function normalScore(z){
+  if(z===null||z===undefined||isNaN(z))return null;
+  if(z>=0.5)return Math.min(1,0.85+0.15*(z-0.5));
+  if(z>=-0.5)return 0.75+0.1*(z+0.5);
+  return Math.max(0,0.75-0.375*(-0.5-z));
+}
+function sleepSeries(){
+  return sleepRecords().map(r=>[(r.date||'').slice(0,10),r.totalSleep||0]).filter(e=>e[0]&&e[1]>0)
+    .sort((a,b)=>a[0].localeCompare(b[0]));
+}
+/* Recovery for any date: HRV 50, resting HR 25, sleep 15, breathing 10.
+   Each part blends last night (60%) with the 7-day trend (40%), both
+   against your own 60-day normal. The trend alone barely ever leaves
+   the band, so on its own it cannot tell one morning from the next. */
+function dayVal(ser,d){
+  const m=ser.filter(e=>e[0]<=d&&e[0]>=addDays(d,-1));
+  return m.length?m[m.length-1][1]:0;
+}
+function blendZ(today,avg7,st,invert){
+  if(!st)return null;
+  const zt=today?zOf(today,st):null;
+  // a 7-day mean varies about half as much as a single day, so scale it
+  const za=avg7?((st.log?Math.log(avg7):avg7)-st.m)/(st.sd/2):null;
+  let z=zt!==null&&za!==null?0.6*zt+0.4*za:(zt!==null?zt:za);
+  if(z===null)return null;
+  return invert?-z:z;
+}
+function recoveryOn(d,src){
+  const H=src.hrv,R=src.rhr,B=src.resp,Z=src.sleep;
+  const hb=bandStats(winVals(H,d,60),true), rb=bandStats(winVals(R,d,60)),
+        bb=bandStats(winVals(B,d,60)), sb=bandStats(winVals(Z,d,60));
+  const h7=mean(winVals(H,d,7)), r7=mean(winVals(R,d,7)), b7=mean(winVals(B,d,7)), s7=mean(winVals(Z,d,7));
+  const h1=dayVal(H,d), r1=dayVal(R,d), b1=dayVal(B,d), s1=dayVal(Z,d);
+  let zs=blendZ(s1,s7,sb,false);
+  if(s1&&s1<6)zs=Math.min(zs===null?-1:zs,-1.2);         // a short night is short, whatever your normal is
+  const parts=[
+    ['HRV',normalScore(blendZ(h1,h7,hb,false)),50],
+    ['Resting HR',normalScore(blendZ(r1,r7,rb,true)),25],
+    ['Sleep',normalScore(zs),15],
+    ['Breathing',normalScore(blendZ(b1,b7,bb,true)),10]
+  ];
+  const have=parts.filter(p=>p[1]!==null);
+  if(!have.length||parts[0][1]===null)return null;
+  const wsum=have.reduce((a,p)=>a+p[2],0);
+  const total=Math.round(have.reduce((a,p)=>a+p[1]*p[2],0)/wsum*100);
+  return {total,parts:parts.map(p=>[p[0],p[1]===null?null:p[1]*p[2],p[2]]),
+    hrv7:h7,hrvBand:bandOf(hb),hrvStats:hb,rhr7:r7,rhrBand:bandOf(rb)};
+}
+/* Fitness moves in months, so it is judged against health norms. */
+function fitnessNow(){
+  const vo2=last(vals('vo2_max',90));
+  const cr=mean(vals('cardio_recovery',14));
+  const rhr30=mean(vals('resting_heart_rate',30));
+  const bp=(DB.get('bp_log')||[]).filter(x=>x.date>=addDays(TODAY,-60)).pop();
+  const c=x=>Math.max(0,Math.min(1,x));
+  const parts=[
+    ['VO2max',vo2?c((vo2-32)/12):null,40],
+    ['Cardio recovery',cr?c((cr-20)/20):null,25],
+    ['Resting HR, 30 days',rhr30?c((72-rhr30)/17):null,20],
+    ['Blood pressure',bp?(bp.sys<120&&bp.dia<80?1:bp.sys<130&&bp.dia<85?0.8:bp.sys<140&&bp.dia<90?0.5:0.2):null,15]
+  ];
+  const have=parts.filter(p=>p[1]!==null);
+  if(!have.length)return null;
+  const wsum=have.reduce((a,p)=>a+p[2],0);
+  return {total:Math.round(have.reduce((a,p)=>a+p[1]*p[2],0)/wsum*100),
+    parts:parts.map(p=>[p[0],p[1]===null?null:p[1]*p[2],p[2]]),
+    raw:{vo2,cr,rhr30,bp}};
+}
+function recSources(days){
+  return {hrv:metricSeries('heart_rate_variability',days),rhr:metricSeries('resting_heart_rate',days),
+    resp:metricSeries('respiratory_rate',days),sleep:sleepSeries()};
+}
+/* How many mornings in a row today's reading sat below the band. */
+function belowBandStreak(src,band){
+  if(!band)return 0;
+  const byDate=Object.fromEntries(src.hrv);
+  let n=0,d=TODAY;
+  if(!byDate[d])d=addDays(d,-1);
+  for(let i=0;i<14;i++){const v=byDate[d];if(v&&v<band[0]){n++;d=addDays(d,-1);}else break;}
+  return n;
+}
+
 function derive(){
   const hrvS=metricSeries('heart_rate_variability',60);
   const hrvV=hrvS.map(e=>e[1]);
@@ -361,8 +459,15 @@ function derive(){
     consec:consecutiveTraining(), phase:confirmPhase(hrvV),
     core:coreLevel(), deload:deloadWeek(), pelvic:true
   };
+  const src=recSources(130);
+  S.rec=recoveryOn(TODAY,src);
+  S.fit=fitnessNow();
+  S.hrvBand=S.rec&&S.rec.hrvBand;
+  S.rhrBand=S.rec&&S.rec.rhrBand;
+  S.hrvZtoday=S.rec?zOf(S.hrv,S.rec.hrvStats):null;
+  S.belowStreak=belowBandStreak(src,S.hrvBand);
   S.verdict=decideDay();
-  S.score=calcScore();
+  S.score=S.rec?{total:S.rec.total,parts:S.rec.parts}:calcScore();
 }
 
 /* ═══ 8b. WEEKLY SET VOLUME PER MUSCLE ═══
@@ -449,13 +554,21 @@ function decideDay(){
     const drop=S.hrv7?(S.hrv7-S.hrv)/S.hrv7:0;
     const rhrUp=S.rhrBase&&S.rhr?S.rhr-S.rhrBase:0;
     const trend=S.hrv7&&S.hrvPrev7?S.hrvPrev7-S.hrv7:0;
-    if(S.hrv7&&S.hrv7<30){k='ease';why.push('7-day HRV '+S.hrv7.toFixed(1)+' ms');}
-    else if(drop>0.20){k='ease';why.push('HRV '+Math.round(drop*100)+'% under your week average');}
-    else if(S.hrv<28){k='ease';why.push('HRV '+Math.round(S.hrv)+' ms today');}
-    else if(rhrUp>=5){k='ease';why.push('Resting HR '+Math.round(rhrUp)+' bpm over baseline');}
-    else if(trend>=2){k='ease';why.push('Week average HRV down '+trend.toFixed(1)+' ms');}
-    else if(S.hrv>=36&&S.hrv7>=35&&rhrUp<=1&&S.consec===0){k='room';why.push('HRV '+Math.round(S.hrv)+' ms, resting HR at baseline');}
-    else why.push('Everything inside your normal range');
+    const B=S.hrvBand,RB=S.rhrBand;
+    if(B){
+      if(S.belowStreak>=3){k='ease';why.push('HRV below your normal band '+S.belowStreak+' mornings running');}
+      else if(S.hrv7<B[0]){k='ease';why.push('7-day HRV '+S.hrv7.toFixed(1)+' ms, under your band of '+B[0].toFixed(0)+'\u2013'+B[1].toFixed(0));}
+      else if(RB&&S.rec.rhr7>RB[1]+2){k='ease';why.push('Resting HR '+S.rec.rhr7.toFixed(0)+' bpm, above your normal band');}
+      else if(S.hrv7>=B[0]&&S.hrv>=B[0]&&(!RB||S.rec.rhr7<=RB[1])&&S.consec===0){
+        k='room';why.push(S.hrv>S.hrvBand[1]?'HRV above your normal band, resting HR normal':'HRV inside your band, resting HR normal');}
+      else if(S.belowStreak>=1){why.push('HRV below your band today \u2014 one day means little, train as planned');}
+      else why.push('Inside your normal band');
+    } else {
+      // first weeks: not enough history for a band yet
+      if(S.hrv7&&S.hrv7<30){k='ease';why.push('7-day HRV '+S.hrv7.toFixed(1)+' ms');}
+      else if(rhrUp>=5){k='ease';why.push('Resting HR '+Math.round(rhrUp)+' bpm over baseline');}
+      else why.push('Building your normal band \u2014 '+(S.hrvV||[]).length+' of 14 days');
+    }
   }
   // A deload week is planned recovery, so it overrules a good day. The
   // card can no longer say "push" and "cut sets" in the same breath.
@@ -485,32 +598,19 @@ let _hist=null;
 function scoreHistory(days){
   const key=days+'|'+TODAY;
   if(_hist&&_hist.key===key)return _hist.out;
-  const hrv=Object.fromEntries(metricSeries('heart_rate_variability',days+40));
-  const rhr=Object.fromEntries(metricSeries('resting_heart_rate',days+40));
-  const resp=Object.fromEntries(metricSeries('respiratory_rate',days+40));
-  const vo2=metricSeries('vo2_max',days+120);
-  const sl={};sleepRecords().forEach(r=>{const d=(r.date||'').slice(0,10);if(d)sl[d]=r;});
-  const bpl=(DB.get('bp_log')||[]);
-  const win=(map,d,f)=>{
-    const v=[];
-    for(let i=0;i<7;i++){const k=addDays(d,-i);const x=f?f(map[k]):map[k];if(x>0)v.push(x);}
-    return mean(v);
-  };
+  const src=recSources(days+70);
   const out=[];
-  for(let i=days-1;i>=0;i--){
-    const d=addDays(TODAY,-i);
-    if(!hrv[d]&&!rhr[d])continue;
-    const v=vo2.filter(e=>e[0]<=d).pop();
-    const bp=bpl.filter(x=>x.date<=d&&x.date>=addDays(d,-14)).pop();
-    out.push({date:d,score:scoreParts(
-      win(hrv,d),win(rhr,d),
-      win(sl,d,r=>r&&r.totalSleep),win(sl,d,r=>r&&r.deep),
-      v?v[1]:0,win(resp,d),bp).total});
+  for(let k=days-1;k>=0;k--){
+    const d=addDays(TODAY,-k);
+    const r=recoveryOn(d,src);
+    if(r)out.push({date:d,score:r.total});
   }
   _hist={key,out};
   return out;
 }
-function scoreColour(n){return n>=75?'var(--green)':n>=55?'var(--yellow)':'var(--red)';}
+/* 85+ strong \u00B7 70-84 your normal \u00B7 55-69 below normal \u00B7 under 55 low */
+function scoreColour(n){return n>=85?'var(--green)':n>=70?'var(--t1)':n>=55?'var(--yellow)':'var(--red)';}
+function scoreWord(n){return n>=85?'strong':n>=70?'your normal':n>=55?'below normal':'low';}
 function calcScore(){
   const h=S.hrv7,r=mean(S.rhrV.slice(-7)),v=S.vo2,resp=S.resp;
   const tot=mean(sleepRecords().slice(-7).map(x=>x.totalSleep||0));
@@ -949,7 +1049,9 @@ function renderToday(){
       '<span class="muted">Today '+(S.hrv?Math.round(S.hrv)+' ms':'no reading')+
         (S.hrvIsToday?'':' · not from today')+'</span>'+
       '<span class="muted">'+todayVsWeek()+'</span>'+
-    '</div></div>';
+    '</div>'+
+    (S.hrvBand?'<div class="muted" style="margin-top:6px;text-align:left">Your normal band '+S.hrvBand[0].toFixed(0)+'\u2013'+S.hrvBand[1].toFixed(0)+' ms · last 60 days · inside it is the good signal</div>':'')+
+    '</div>';
   setTimeout(()=>sparkline('spark-hrv',S.hrvV.slice(-30),'#7DA6F0'),0);
 
   // strip
@@ -958,7 +1060,7 @@ function renderToday(){
     cell(S.rhr?Math.round(S.rhr):'—','Rest HR',S.rhr&&S.rhrBase?(S.rhr<=S.rhrBase?'var(--green)':'var(--yellow)'):'')+
     cell(S.totalSleep?S.totalSleep.toFixed(1):'—','Sleep',S.totalSleep>=7.5?'var(--green)':'')+
     cell(dS?dS.toFixed(1):'—','Deep',dS>=1?'var(--green)':dS>=.6?'var(--yellow)':'var(--red)')+
-    cell(sc,'Score',sc>=75?'var(--green)':sc>=55?'var(--yellow)':'var(--red)')+'</div>';
+    cell(sc,'Recovery',scoreColour(sc))+'</div>';
 
   // verdict
   const V=STATES[S.verdict.soft?'softrest':S.verdict.k]||STATES.normal,pl=S.verdict.plan;
@@ -985,10 +1087,19 @@ function renderToday(){
 }
 /* One morning is noisy; show how far it sits from the trend. */
 function todayVsWeek(){
-  if(!S.hrv||!S.hrv7)return '';
-  const d=(S.hrv-S.hrv7)/S.hrv7*100;
-  if(Math.abs(d)<8)return 'in line with the week';
-  return (d>0?'+':'')+Math.round(d)+'% vs week';
+  if(!S.hrv)return '';
+  const B=S.hrvBand;
+  if(!B){
+    if(!S.hrv7)return '';
+    const d=(S.hrv-S.hrv7)/S.hrv7*100;
+    return Math.abs(d)<8?'in line with the week':(d>0?'+':'')+Math.round(d)+'% vs week';
+  }
+  if(S.hrv<B[0]){
+    const n=S.belowStreak||1;
+    return '<span style="color:'+(n>=3?'var(--red)':'var(--yellow)')+'">below your band \u00B7 day '+n+(n<3?' of 3':'')+'</span>';
+  }
+  if(S.hrv>B[1])return '<span style="color:var(--green)">above your band</span>';
+  return 'inside your band';
 }
 function cell(v,l,col){return '<div><b'+(col?' style="color:'+col+'"':'')+'>'+v+'</b><span>'+l+'</span></div>';}
 function row(k,v){return '<div><u>'+k+'</u><span>'+h(v)+'</span></div>';}
@@ -1741,13 +1852,9 @@ function renderProgress(){
       (progOpen&&M[progOpen]?rangeBar()+metricCard(M[progOpen].name,M[progOpen].cur||0,M[progOpen].unit,M[progOpen].data,M[progOpen].better,M[progOpen].dec):
         '<div class="muted" style="margin:0 20px 14px">Tap a tile for the full chart.</div>')+
       '<div class="sec">Month by month</div>'+monthlyTable()+
-      '<div class="sec">Recovery score</div>'+scoreCard()+
-      '<div class="card">'+
-      S.score.parts.map(([l,v,m])=>
-        '<div style="margin-bottom:8px"><div class="row" style="margin-bottom:3px"><span class="muted">'+l+'</span>'+
-        '<span class="muted">'+Math.round(v)+' / '+m+'</span></div>'+
-        '<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+Math.round(v/m*100)+'%;background:var(--t2)"></div></div></div>').join('')+
-      '</div>'+
+      '<div class="sec">Recovery \u00B7 daily</div>'+scoreCard()+
+      partsCard(S.score.parts,'Each part blends last night (60%) with your 7-day trend (40%), both against your own 60-day normal. Inside your normal scores about 75\u201385; below it falls away.')+
+      '<div class="sec">Fitness \u00B7 monthly</div>'+fitnessCard()+
       '<div class="sec">Your own correlations</div>'+renderPatterns()+
       '<div class="sec">Summary</div><div class="card">'+
       '<div class="muted" style="margin-bottom:10px">Thirty days of numbers in one block, for a full analysis elsewhere.</div>'+
@@ -1786,6 +1893,30 @@ function renderProgress(){
 }
 
 /* ═══ 21. HISTORY ═══ */
+function partsCard(parts,note){
+  return '<div class="card">'+parts.map(([l,v,m])=>
+    '<div style="margin-bottom:8px"><div class="row" style="margin-bottom:3px"><span class="muted">'+l+'</span>'+
+    '<span class="muted">'+(v===null?'no data':Math.round(v)+' / '+m)+'</span></div>'+
+    '<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+(v===null?0:Math.round(v/m*100))+'%;background:var(--t2)"></div></div></div>').join('')+
+    (note?'<div class="muted" style="margin-top:6px;line-height:1.6">'+note+'</div>':'')+'</div>';
+}
+function fitnessCard(){
+  const F=S.fit;
+  if(!F)return '<div class="card"><div class="muted">Not enough data yet.</div></div>';
+  const r=F.raw;
+  return '<div class="card">'+
+    '<div class="row" style="align-items:flex-end;margin-bottom:12px">'+
+      '<div style="font-family:\'Instrument Serif\',serif;font-size:38px;color:'+(F.total>=75?'var(--green)':F.total>=50?'var(--t1)':'var(--yellow)')+'">'+F.total+'</div>'+
+      '<div class="muted" style="text-align:right;max-width:62%;line-height:1.6">How fit and healthy you are. Moves over months \u2014 do not read it daily.</div></div>'+
+    F.parts.map(([l,v,m])=>
+      '<div style="margin-bottom:8px"><div class="row" style="margin-bottom:3px"><span class="muted">'+l+'</span>'+
+      '<span class="muted">'+(v===null?'no data':Math.round(v)+' / '+m)+'</span></div>'+
+      '<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+(v===null?0:Math.round(v/m*100))+'%;background:var(--t2)"></div></div></div>').join('')+
+    '<div class="muted" style="margin-top:6px;line-height:1.6">'+
+      (r.vo2?'VO2max '+r.vo2.toFixed(1)+' ':'')+(r.cr?'\u00B7 cardio recovery '+r.cr.toFixed(0)+' ':'')+
+      (r.rhr30?'\u00B7 resting HR '+r.rhr30.toFixed(0)+' ':'')+(r.bp?'\u00B7 BP '+r.bp.sys+'/'+r.bp.dia:'')+
+      '. Judged against health norms, not your own range.</div></div>';
+}
 /* Where the score has been, not just where it is. */
 function scoreCard(){
   const hist=scoreHistory(60);
@@ -1805,7 +1936,7 @@ function scoreCard(){
   return '<div class="card">'+
     '<div class="row" style="align-items:flex-end;margin-bottom:12px">'+
       '<div><div style="font-family:\'Instrument Serif\',serif;font-size:38px;color:'+scoreColour(now)+'">'+now+'</div>'+
-      '<div class="muted" style="margin-top:2px">'+(now>=75?'good':now>=55?'holding':'under pressure')+'</div></div>'+
+      '<div class="muted" style="margin-top:2px">'+scoreWord(now)+'</div></div>'+
       '<div style="text-align:right"><div class="muted">week <span style="color:'+dcol(dW)+'">'+dtxt(dW)+'</span></div>'+
       '<div class="muted" style="margin-top:3px">month <span style="color:'+dcol(dM)+'">'+dtxt(dM)+'</span></div></div>'+
     '</div>'+
@@ -1813,9 +1944,10 @@ function scoreCard(){
     '<div class="row"><span class="muted" style="font-size:9px">30 days ago</span><span class="muted" style="font-size:9px">today</span></div>'+
     '<canvas id="c-score" style="height:54px;margin-top:12px"></canvas>'+
     '<div class="row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">'+
-      '<span class="muted" style="font-size:9px;color:var(--red)">\u25A0 under 55</span>'+
-      '<span class="muted" style="font-size:9px;color:var(--yellow)">\u25A0 55\u201374</span>'+
-      '<span class="muted" style="font-size:9px;color:var(--green)">\u25A0 75+</span></div>'+
+      '<span class="muted" style="font-size:9px;color:var(--red)">\u25A0 &lt;55 low</span>'+
+      '<span class="muted" style="font-size:9px;color:var(--yellow)">\u25A0 55\u201369</span>'+
+      '<span class="muted" style="font-size:9px;color:var(--t1)">\u25A0 70\u201384 normal</span>'+
+      '<span class="muted" style="font-size:9px;color:var(--green)">\u25A0 85+</span></div>'+
     '</div>';
 }
 function miniTile(label,val,unit,delta,better){
@@ -1924,6 +2056,7 @@ function openSettings(){
         '<input type="file" accept=".json,application/json" style="display:none" onchange="fileImport(this)"></label>'+
       '<button class="btn btn-quiet" style="width:100%;margin:0" onclick="manualImport()">Paste into a box instead</button>'+
       '<div class="muted" style="margin-top:10px">'+(DB.get('health_uploaded')?'Last import '+DB.get('health_uploaded'):'No import yet')+'</div>'+
+      '<div class="muted" style="margin-top:10px;line-height:1.6">For a daily HRV you can act on: one minute of the Mindfulness breathing session each morning before you get up. The watch\u2019s automatic readings are sporadic and noisy.</div>'+
     '</div>'+
     '<div class="card" style="margin:0 0 10px">'+
       '<button class="btn" style="width:100%;margin:0 0 8px" onclick="showMonthly()">30-day summary</button>'+
@@ -1935,7 +2068,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v7.8 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v8.0 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -1962,7 +2095,7 @@ function openDiag(){
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v7.3')+
+      diagRow('App version','v8.0')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
