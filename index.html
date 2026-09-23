@@ -403,6 +403,37 @@ function recoveryOn(d,src){
   return {total,parts:parts.map(p=>[p[0],p[1]===null?null:p[1]*p[2],p[2]]),
     hrv7:h7,hrvBand:bandOf(hb),hrvStats:hb,rhr7:r7,rhrBand:bandOf(rb)};
 }
+/* Fitness, recomputed for any past date so months can be compared. */
+function fitnessOn(d){
+  const c=x=>Math.max(0,Math.min(1,x));
+  const pick=(name,days)=>metricSeries(name,400).filter(e=>e[0]<=d&&e[0]>=addDays(d,-days)).map(e=>e[1]);
+  const v=pick('vo2_max',90), cr=pick('cardio_recovery',14), rh=pick('resting_heart_rate',30);
+  const bp=(DB.get('bp_log')||[]).filter(x=>x.date<=d&&x.date>=addDays(d,-60)).pop();
+  const vo2=v.length?v[v.length-1]:0, crm=mean(cr), rhm=mean(rh);
+  const parts=[
+    ['VO2max',vo2?c((vo2-32)/12):null,40],
+    ['Cardio recovery',crm?c((crm-20)/20):null,25],
+    ['Resting HR, 30 days',rhm?c((72-rhm)/17):null,20],
+    ['Blood pressure',bp?(bp.sys<120&&bp.dia<80?1:bp.sys<130&&bp.dia<85?0.8:bp.sys<140&&bp.dia<90?0.5:0.2):null,15]
+  ];
+  const have=parts.filter(p=>p[1]!==null);
+  if(!have.length)return null;
+  const w=have.reduce((a,p)=>a+p[2],0);
+  return {total:Math.round(have.reduce((a,p)=>a+p[1]*p[2],0)/w*100),
+    parts:parts.map(p=>[p[0],p[1]===null?null:p[1]*p[2],p[2]]),
+    raw:{vo2,cr:crm,rhr30:rhm,bp}};
+}
+/* Month-end snapshots, so you can see whether it is actually moving. */
+function fitnessMonths(){
+  const out=[];
+  for(let i=5;i>=0;i--){
+    const ref=new Date(TODAY);ref.setMonth(ref.getMonth()-i+1);ref.setDate(0);
+    let d=iso(ref); if(d>TODAY)d=TODAY;
+    const f=fitnessOn(d);
+    if(f&&f.raw.vo2)out.push({month:d.slice(0,7),total:f.total,vo2:f.raw.vo2,cr:f.raw.cr,rhr:f.raw.rhr30});
+  }
+  return out;
+}
 /* Fitness moves in months, so it is judged against health norms. */
 function fitnessNow(){
   const vo2=last(vals('vo2_max',90));
@@ -1854,8 +1885,7 @@ function renderProgress(){
       '<div class="sec">Month by month</div>'+monthlyTable()+
       '<div class="sec">Recovery \u00B7 daily</div>'+scoreCard()+
       partsCard(S.score.parts,'Each part blends last night (60%) with your 7-day trend (40%), both against your own 60-day normal. Inside your normal scores about 75\u201385; below it falls away.')+
-      '<div class="sec">Fitness \u00B7 monthly</div>'+fitnessCard()+
-      '<div class="sec">Your own correlations</div>'+renderPatterns()+
+      '<div class="sec">Fitness \u00B7 monthly</div>'+fitnessCard()+fitnessMonthTable()+
       '<div class="sec">Summary</div><div class="card">'+
       '<div class="muted" style="margin-bottom:10px">Thirty days of numbers in one block, for a full analysis elsewhere.</div>'+
       '<button class="btn" style="width:100%;margin:0" onclick="showMonthly()">Build 30-day summary</button></div>';
@@ -1881,9 +1911,8 @@ function renderProgress(){
         miniTile('Blood pressure',bp?bp.sys+'/'+bp.dia:'\u2014','',null,'')+
         miniTile('Core level',S.core,CORE_LEVELS[S.core].label,null,'')+
       '</div>'+
-      (w.length>1?'<div class="metric" style="padding:12px 14px"><canvas id="c-wt" style="height:56px"></canvas>'+
-        '<div class="row" style="margin-top:6px"><span class="muted">'+w[0].date+'</span>'+
-        '<span class="muted">'+w.length+' readings</span></div></div>':'')+
+      '<div class="sec" style="margin-top:4px">Weight</div>'+weightCard()+
+      (w.length>1?'<div class="metric" style="padding:12px 14px"><canvas id="c-wt" style="height:56px"></canvas></div>':'')+
       '<div class="sec">Sets per muscle this week</div>'+volumePanel()+
       (under.length?'<div class="card"><div class="muted" style="line-height:1.6">Behind the 8-set band: '+h(under.join(', '))+'</div></div>':'')+
       '<div class="sec">Working weights</div>'+weightsTable();
@@ -1899,6 +1928,32 @@ function partsCard(parts,note){
     '<span class="muted">'+(v===null?'no data':Math.round(v)+' / '+m)+'</span></div>'+
     '<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+(v===null?0:Math.round(v/m*100))+'%;background:var(--t2)"></div></div></div>').join('')+
     (note?'<div class="muted" style="margin-top:6px;line-height:1.6">'+note+'</div>':'')+'</div>';
+}
+function fitnessMonthTable(){
+  const m=fitnessMonths();
+  if(m.length<2)return '';
+  const cell=function(v,prev,dec,better){
+    if(v===undefined||v===null||!v)return '<span style="flex:1;text-align:right;font-size:11px">\u2013</span>';
+    let col='var(--t1)';
+    if(prev){const d=v-prev;const good=better==='down'?d<0:d>0;
+      if(Math.abs(d)>=(dec?0.3:0.5))col=good?'var(--green)':'var(--red)';}
+    return '<span style="flex:1;text-align:right;font-size:11px;color:'+col+'">'+v.toFixed(dec)+'</span>';
+  };
+  return '<div class="card" style="padding:12px 14px">'+
+    '<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)">'+
+      '<span class="muted" style="flex:1.1;font-size:8px">Month</span>'+
+      '<span class="muted" style="flex:1;text-align:right;font-size:8px">Score</span>'+
+      '<span class="muted" style="flex:1;text-align:right;font-size:8px">VO2</span>'+
+      '<span class="muted" style="flex:1;text-align:right;white-space:nowrap;font-size:8px">Cardio rec</span>'+
+      '<span class="muted" style="flex:1;text-align:right;white-space:nowrap;font-size:8px">Rest HR</span></div>'+
+    m.map(function(r,i){
+      const p=i?m[i-1]:null;
+      return '<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">'+
+        '<span style="flex:1.1;font-size:11px">'+r.month+'</span>'+
+        cell(r.total,p&&p.total,0,'up')+cell(r.vo2,p&&p.vo2,1,'up')+
+        cell(r.cr,p&&p.cr,0,'up')+cell(r.rhr,p&&p.rhr,0,'down')+'</div>';
+    }).join('')+
+    '<div class="muted" style="margin-top:9px;line-height:1.6">End of each month. Green means it moved the right way versus the month before.</div></div>';
 }
 function fitnessCard(){
   const F=S.fit;
@@ -1948,6 +2003,42 @@ function scoreCard(){
       '<span class="muted" style="font-size:9px;color:var(--yellow)">\u25A0 55\u201369</span>'+
       '<span class="muted" style="font-size:9px;color:var(--t1)">\u25A0 70\u201384 normal</span>'+
       '<span class="muted" style="font-size:9px;color:var(--green)">\u25A0 85+</span></div>'+
+    '</div>';
+}
+/* How fast the weight is actually coming off, over several windows. */
+function weightTrends(){
+  const w=(DB.get('weight_log')||[]).slice().sort((a,b)=>a.date.localeCompare(b.date));
+  if(w.length<2)return null;
+  const now=w[w.length-1];
+  const at=days=>{const cut=addDays(TODAY,-days);const p=w.filter(r=>r.date<=cut);return p.length?p[p.length-1]:null;};
+  const rows=[[7,'7 days'],[30,'30 days'],[90,'90 days']].map(function(x){
+    const p=at(x[0]); if(!p)return null;
+    const span=daysBetween(p.date,now.date)||1;
+    const diff=now.kg-p.kg;
+    return {label:x[1],from:p.kg,diff:+diff.toFixed(1),perWeek:+(diff/span*7).toFixed(2)};
+  }).filter(Boolean);
+  const first=w[0], spanAll=daysBetween(first.date,now.date)||1;
+  return {now:now.kg,rows,n:w.length,all:{from:first.kg,date:first.date,
+    diff:+(now.kg-first.kg).toFixed(1),perWeek:+((now.kg-first.kg)/spanAll*7).toFixed(2)}};
+}
+function weightCard(){
+  const t=weightTrends();
+  if(!t)return '<div class="card"><div class="muted">Log your weight a few times and the rate appears here.</div></div>';
+  const col=function(d){return d<-0.1?'var(--green)':d>0.1?'var(--red)':'var(--t2)';};
+  return '<div class="card">'+
+    '<div class="row" style="align-items:flex-end;margin-bottom:12px">'+
+      '<div><div style="font-family:\'Instrument Serif\',serif;font-size:32px">'+t.now.toFixed(1)+
+      '<span style="font-size:11px;color:var(--t3)"> kg</span></div>'+
+      '<div class="muted" style="margin-top:2px">'+t.n+' readings since '+t.all.date+'</div></div>'+
+      '<div style="text-align:right"><div style="color:'+col(t.all.perWeek)+';font-size:13px">'+
+      (t.all.diff>0?'+':'')+t.all.diff+' kg total</div><div class="muted">'+
+      (t.all.perWeek>0?'+':'')+t.all.perWeek+' kg / week</div></div></div>'+
+    t.rows.map(function(r){return '<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)">'+
+      '<span class="muted">last '+r.label+'</span>'+
+      '<span style="font-size:11px">'+r.from.toFixed(1)+' \u2192 '+t.now.toFixed(1)+
+      ' <span style="color:'+col(r.perWeek)+'">'+(r.diff>0?'+':'')+r.diff+'</span>'+
+      ' <span class="muted">'+(r.perWeek>0?'+':'')+r.perWeek+'/wk</span></span></div>';}).join('')+
+    '<div class="muted" style="margin-top:9px;line-height:1.6">Half a kilo a week is the sustainable rate \u2014 faster costs muscle.</div>'+
     '</div>';
 }
 function miniTile(label,val,unit,delta,better){
@@ -2068,7 +2159,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v8.0 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v8.1 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
