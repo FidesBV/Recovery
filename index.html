@@ -1768,8 +1768,8 @@ function journeyLines(days){
   const defs=[
     {label:'VO2max',col:'#4ADE80',ser:metricSeries('vo2_max',days+40),inv:false,win:7},
     {label:'HRV',col:'#7DA6F0',ser:metricSeries('heart_rate_variability',days+40),inv:false,win:14},
-    {label:'Resting HR',col:'#FBBF24',ser:metricSeries('resting_heart_rate',days+40),inv:true,win:14},
-    {label:'Weight',col:'#F87171',ser:(DB.get('weight_log')||[]).map(r=>[r.date,r.kg]).sort((a,b)=>a[0].localeCompare(b[0])),inv:true,win:3}
+    {label:'Resting HR',col:'#B49BE8',ser:metricSeries('resting_heart_rate',days+40),inv:true,win:14},
+    {label:'Weight',col:'#5FD9C8',ser:(DB.get('weight_log')||[]).map(r=>[r.date,r.kg]).sort((a,b)=>a[0].localeCompare(b[0])),inv:true,win:3}
   ];
   const from=addDays(TODAY,-days+1);
   return defs.map(d=>{
@@ -1799,7 +1799,7 @@ function journeyChart(days){
         '<span style="width:10px;height:7px;background:#7DA6F0;opacity:.55;display:inline-block;border-radius:2px"></span>'+
         '<span class="muted" style="font-size:10px">aerobic min / week</span></div>'+
     '</div>'+
-    '<div class="muted" style="margin-top:9px;line-height:1.6">Everything indexed to 100 at the start and flipped where lower is better, so up is always improving. The bars underneath line up with the same weeks.'+
+    '<div class="muted" style="margin-top:9px;line-height:1.6">Indexed to 100 at the start, and flipped where lower is better \u2014 so a rising weight line means kilos lost. Colours only tell the lines apart; up is good for all of them. The bars underneath share the same weeks.'+
       (vo2?' The dashed green line is VO2max 40.':'')+'</div>'+
   '</div>';
 }
@@ -2075,6 +2075,7 @@ function renderProgress(){
       '</div>'+
       '<div class="sec" style="margin-top:4px">Weight</div>'+weightCard()+
       (w.length>1?'<div class="metric" style="padding:12px 14px"><canvas id="c-wt" style="height:56px"></canvas></div>':'')+
+      '<div class="sec">Strength over time</div>'+strengthCard()+
       '<div class="sec">Sets per muscle this week</div>'+volumePanel()+
       (under.length?'<div class="card"><div class="muted" style="line-height:1.6">Behind the 8-set band: '+h(under.join(', '))+'</div></div>':'')+
       '<div class="sec">Working weights</div>'+weightsTable();
@@ -2299,6 +2300,115 @@ function weightsTable(){
     '</span></div>').join('')+'</div>';
 }
 
+/* ═══ STRENGTH ARC ═══
+   One line for overall strength: every loaded exercise indexed to its own
+   first working weight, then averaged. That way a 3 kg jump on a curl and
+   a 3 kg jump on a press count for what they are relative to each other. */
+function strengthSeries(weeks){
+  const byEx={};
+  realSessions().forEach(s=>{
+    Object.entries(s.exercises||{}).forEach(([id,sets])=>{
+      const done=sets.filter(y=>y.done&&y.kg>0).map(y=>y.kg);
+      if(!done.length)return;
+      (byEx[id]=byEx[id]||[]).push({d:s.date,kg:Math.max.apply(null,done)});
+    });
+  });
+  const ids=Object.keys(byEx).filter(id=>byEx[id].length>=2);
+  if(ids.length<2)return null;
+  const base={};ids.forEach(id=>{base[id]=byEx[id][0].kg;});
+  const out=[];
+  for(let i=weeks-1;i>=0;i--){
+    const end=addDays(weekStart(),-7*i+6);
+    const idx=[];
+    ids.forEach(id=>{
+      const hits=byEx[id].filter(p=>p.d<=end);
+      if(hits.length)idx.push(hits[hits.length-1].kg/base[id]*100);
+    });
+    if(idx.length>=2)out.push({week:addDays(weekStart(),-7*i),idx:mean(idx),n:idx.length});
+  }
+  return out.length>=2?{points:out,ids:ids.length}:null;
+}
+function volumeSeries(weeks){
+  const out=[];
+  for(let i=weeks-1;i>=0;i--){
+    const start=addDays(weekStart(),-7*i), end=addDays(start,6);
+    let load=0;
+    sessions().filter(s=>s.date>=start&&s.date<=end&&!s.skipped).forEach(s=>{
+      Object.values(s.exercises||{}).forEach(sets=>sets.forEach(y=>{
+        if(y.done)load+=(y.kg||0)*(y.reps||0);
+      }));
+    });
+    out.push({week:start,load:Math.round(load)});
+  }
+  return out;
+}
+function strengthCard(){
+  const st=strengthSeries(14), vol=volumeSeries(14);
+  if(!st)return '<div class="card"><div class="muted">Log a few loaded sessions and your strength curve appears here.</div></div>';
+  const first=st.points[0].idx, last=st.points[st.points.length-1].idx;
+  const pct=+(last-first).toFixed(1);
+  const totalLoad=vol.reduce((a,b)=>a+b.load,0);
+  const thisWk=vol[vol.length-1].load, prevWk=vol.length>1?vol[vol.length-2].load:0;
+  setTimeout(()=>drawStrength('c-strength',st.points,vol),0);
+  return '<div class="card" style="padding:14px 12px 12px">'+
+    '<div class="row" style="align-items:flex-end;margin-bottom:10px;padding:0 2px">'+
+      '<div><div style="font-family:\'Instrument Serif\',serif;font-size:32px;color:'+(pct>1?'var(--green)':pct<-1?'var(--red)':'var(--t1)')+'">'+
+        (pct>0?'+':'')+pct+'%</div>'+
+      '<div class="muted" style="margin-top:2px">across '+st.ids+' loaded exercises</div></div>'+
+      '<div style="text-align:right"><div class="muted">this week '+Math.round(thisWk/1000)+'k kg</div>'+
+      '<div class="muted" style="margin-top:3px">'+(prevWk?(thisWk>=prevWk?'up from ':'down from ')+Math.round(prevWk/1000)+'k':'')+'</div></div>'+
+    '</div>'+
+    '<canvas id="c-strength" style="height:150px"></canvas>'+
+    '<div style="display:flex;gap:12px;margin-top:9px;padding:0 2px">'+
+      '<div style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:3px;background:#4ADE80;border-radius:2px"></span>'+
+      '<span class="muted" style="font-size:10px">strength index</span></div>'+
+      '<div style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:7px;background:#7DA6F0;opacity:.5;border-radius:2px"></span>'+
+      '<span class="muted" style="font-size:10px">weekly volume (kg lifted)</span></div>'+
+    '</div>'+
+    '<div class="muted" style="margin-top:9px;line-height:1.6">Each exercise is indexed to its own starting weight, then averaged \u2014 so light and heavy lifts count equally. Volume is sets \u00D7 reps \u00D7 kg.</div>'+
+  '</div>';
+}
+function drawStrength(id,pts,vol){
+  const c=el(id);if(!c||!c.parentElement)return;
+  const w=c.parentElement.offsetWidth;if(!w||w<20){setTimeout(()=>drawStrength(id,pts,vol),300);return;}
+  const dpr=window.devicePixelRatio||1,h=150;
+  c.width=w*dpr;c.height=h*dpr;
+  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
+  const L=30,R=6,T=8,B=16,W=w-L-R,H=h-T-B;
+  const vals=pts.map(p=>p.idx);
+  let mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals);
+  mn=Math.min(mn,100);mx=Math.max(mx,100);
+  const pad=Math.max(2,(mx-mn)*0.2);mn-=pad;mx+=pad;
+  const n=Math.max(pts.length,vol.length);
+  const X=i=>L+(i/(n-1))*W;
+  const Y=v=>T+H-((v-mn)/Math.max(0.001,mx-mn))*H;
+  // volume bars first, behind the line
+  const vmax=Math.max(1,...vol.map(v=>v.load));
+  const bw=Math.max(4,(W/n)-4);
+  vol.forEach((v,i)=>{
+    const hh=Math.round(v.load/vmax*(H*0.55));
+    x.fillStyle='#7DA6F0';x.globalAlpha=v.load?.28:.08;
+    x.fillRect(X(i)-bw/2,T+H-hh,bw,Math.max(2,hh));x.globalAlpha=1;
+  });
+  // grid
+  x.font='9px "DM Mono",monospace';x.textAlign='right';
+  const step=(mx-mn)>40?20:(mx-mn)>20?10:5;
+  for(let v=Math.ceil(mn/step)*step;v<=mx;v+=step){
+    x.strokeStyle=v===100?'#33333A':'#1C1C1F';x.setLineDash(v===100?[3,3]:[]);
+    x.beginPath();x.moveTo(L,Y(v));x.lineTo(L+W,Y(v));x.stroke();x.setLineDash([]);
+    x.fillStyle=v===100?'#9A9AA5':'#5E5E68';x.fillText((v>100?'+':'')+(v-100)+'%',L-5,Y(v)+3);
+  }
+  // the index line
+  const off=n-pts.length;
+  x.beginPath();
+  pts.forEach((p,i)=>{const xx=X(i+off),yy=Y(p.idx);i?x.lineTo(xx,yy):x.moveTo(xx,yy);});
+  x.strokeStyle='#4ADE80';x.lineWidth=2.4;x.lineJoin='round';x.stroke();
+  const lastP=pts[pts.length-1];
+  x.beginPath();x.arc(X(n-1),Y(lastP.idx),3,0,7);x.fillStyle='#4ADE80';x.fill();
+  x.fillStyle='#5E5E68';x.textAlign='left';x.fillText(vol[0].week.slice(5),L,h-4);
+  x.textAlign='right';x.fillText('this week',w-R,h-4);
+}
+
 function volumePanel(){
   const now=weeklyVolume(0),prev=weeklyVolume(1);
   const names={chest:'Chest',shoulders:'Shoulders',triceps:'Triceps',back:'Back',biceps:'Biceps',
@@ -2384,7 +2494,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v8.6 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v8.7 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -2411,7 +2521,7 @@ function openDiag(){
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v8.6')+
+      diagRow('App version','v8.7')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
