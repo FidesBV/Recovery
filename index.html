@@ -2045,7 +2045,6 @@ function renderProgress(){
       '</div>'+
       (progOpen&&M[progOpen]?rangeBar()+metricCard(M[progOpen].name,M[progOpen].cur||0,M[progOpen].unit,M[progOpen].data,M[progOpen].better,M[progOpen].dec):
         '<div class="muted" style="margin:0 20px 14px">Tap a tile for the full chart.</div>')+
-      '<div class="sec">Month by month</div>'+monthlyTable()+
       '<div class="sec">Recovery \u00B7 daily</div>'+scoreCard()+
       partsCard(S.score.parts,'Each part blends last night (60%) with your 7-day trend (40%), both against your own 60-day normal. Inside your normal scores about 75\u201385; below it falls away.')+
       '<div class="sec">Fitness \u00B7 monthly</div>'+fitnessCard()+fitnessMonthTable()+
@@ -2231,6 +2230,75 @@ function drawScoreBars(id,hist){
     x.globalAlpha=1;
   });
 }
+/* How fast the weight is actually coming off, over several windows. */
+function weightTrends(){
+  const w=(DB.get('weight_log')||[]).slice().sort((a,b)=>a.date.localeCompare(b.date));
+  if(w.length<2)return null;
+  const now=w[w.length-1];
+  const at=days=>{const cut=addDays(TODAY,-days);const p=w.filter(r=>r.date<=cut);return p.length?p[p.length-1]:null;};
+  const rows=[[7,'7 days'],[30,'30 days'],[90,'90 days']].map(function(x){
+    const p=at(x[0]); if(!p)return null;
+    const span=daysBetween(p.date,now.date)||1;
+    const diff=now.kg-p.kg;
+    return {label:x[1],from:p.kg,diff:+diff.toFixed(1),perWeek:+(diff/span*7).toFixed(2)};
+  }).filter(Boolean);
+  const first=w[0], spanAll=daysBetween(first.date,now.date)||1;
+  return {now:now.kg,rows,n:w.length,all:{from:first.kg,date:first.date,
+    diff:+(now.kg-first.kg).toFixed(1),perWeek:+((now.kg-first.kg)/spanAll*7).toFixed(2)}};
+}
+function weightCard(){
+  const t=weightTrends();
+  if(!t)return '<div class="card"><div class="muted">Log your weight a few times and the rate appears here.</div></div>';
+  const col=function(d){return d<-0.1?'var(--green)':d>0.1?'var(--red)':'var(--t2)';};
+  return '<div class="card">'+
+    '<div class="row" style="align-items:flex-end;margin-bottom:12px">'+
+      '<div><div style="font-family:\'Instrument Serif\',serif;font-size:32px">'+t.now.toFixed(1)+
+      '<span style="font-size:11px;color:var(--t3)"> kg</span></div>'+
+      '<div class="muted" style="margin-top:2px">'+t.n+' readings since '+t.all.date+'</div></div>'+
+      '<div style="text-align:right"><div style="color:'+col(t.all.perWeek)+';font-size:13px">'+
+      (t.all.diff>0?'+':'')+t.all.diff+' kg total</div><div class="muted">'+
+      (t.all.perWeek>0?'+':'')+t.all.perWeek+' kg / week</div></div></div>'+
+    t.rows.map(function(r){return '<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)">'+
+      '<span class="muted">last '+r.label+'</span>'+
+      '<span style="font-size:11px">'+r.from.toFixed(1)+' \u2192 '+t.now.toFixed(1)+
+      ' <span style="color:'+col(r.perWeek)+'">'+(r.diff>0?'+':'')+r.diff+'</span>'+
+      ' <span class="muted">'+(r.perWeek>0?'+':'')+r.perWeek+'/wk</span></span></div>';}).join('')+
+    '<div class="muted" style="margin-top:9px;line-height:1.6">Half a kilo a week is the sustainable rate \u2014 faster costs muscle.</div>'+
+    '</div>';
+}
+function miniTile(label,val,unit,delta,better){
+  let col='var(--t2)',extra='';
+  if(delta!==null&&delta!==undefined&&Math.abs(delta)>=0.3){
+    const good=better==='down'?delta<0:delta>0;
+    col=good?'var(--green)':'var(--red)';
+    extra='<div style="color:'+col+';font-size:10px;margin-top:3px">'+(delta>0?'+':'')+delta.toFixed(1)+'</div>';
+  }
+  return '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:11px 10px">'+
+    '<div class="muted" style="font-size:8px;letter-spacing:.1em;text-transform:uppercase">'+label+'</div>'+
+    '<div style="font-family:\'Instrument Serif\',serif;font-size:20px;margin-top:4px">'+val+
+      (unit?'<span style="font-size:9px;color:var(--t3)"> '+unit+'</span>':'')+'</div>'+extra+'</div>';
+}
+/* Only exercises you have actually loaded, newest first. */
+function weightsTable(){
+  const log=realSessions().slice(-30),byEx={};
+  log.forEach(x=>Object.entries(x.exercises||{}).forEach(([id,sets])=>{
+    const done=sets.filter(y=>y.done&&y.kg>0).map(y=>y.kg);
+    if(done.length)(byEx[id]=byEx[id]||[]).push({d:x.date,kg:Math.max.apply(null,done)});
+  }));
+  const rows=Object.entries(byEx).map(([id,v])=>{
+    const e=EX_DB[id];if(!e)return null;
+    const now=v[v.length-1],first=v[0];
+    return {name:e.name,kg:now.kg,d:now.kg-first.kg,date:now.d};
+  }).filter(Boolean).sort((a,b)=>b.date.localeCompare(a.date));
+  if(!rows.length)return '<div class="card"><div class="muted">Log a few loaded sessions first.</div></div>';
+  return '<div class="card">'+rows.map(r=>
+    '<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">'+
+    '<span style="font-size:11px">'+h(r.name)+'</span>'+
+    '<span style="font-size:11px">'+r.kg+' kg'+
+      (Math.abs(r.d)>=0.5?' <span style="color:'+(r.d>0?'var(--green)':'var(--t3)')+'">'+(r.d>0?'+':'')+r.d.toFixed(1)+'</span>':'')+
+    '</span></div>').join('')+'</div>';
+}
+
 function volumePanel(){
   const now=weeklyVolume(0),prev=weeklyVolume(1);
   const names={chest:'Chest',shoulders:'Shoulders',triceps:'Triceps',back:'Back',biceps:'Biceps',
@@ -2316,7 +2384,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v8.5 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v8.6 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -2343,7 +2411,7 @@ function openDiag(){
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v8.5')+
+      diagRow('App version','v8.6')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
