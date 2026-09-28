@@ -179,7 +179,6 @@ nav b{display:block;font-size:15px;margin-bottom:3px;font-weight:400;}
   </div>
   <div id="t-hero"></div>
   <div id="t-strip"></div>
-  <div id="t-wellness"></div>
   <div id="t-verdict"></div>
   <div id="t-notices"></div>
   <div id="t-work"></div>
@@ -391,10 +390,9 @@ function recoveryOn(d,src){
   let zs=blendZ(s1,s7,sb,false);
   if(s1&&s1<6)zs=Math.min(zs===null?-1:zs,-1.2);         // a short night is short, whatever your normal is
   const parts=[
-    ['HRV',normalScore(blendZ(h1,h7,hb,false)),50],
+    ['HRV',normalScore(blendZ(h1,h7,hb,false)),55],
     ['Resting HR',normalScore(blendZ(r1,r7,rb,true)),25],
-    ['Sleep',normalScore(zs),15],
-    ['Breathing',normalScore(blendZ(b1,b7,bb,true)),10]
+    ['Sleep',normalScore(zs),20]
   ];
   const have=parts.filter(p=>p[1]!==null);
   if(!have.length||parts[0][1]===null)return null;
@@ -623,7 +621,7 @@ function scoreParts(hrv7,rhr7,totSleep,deep,vo2,resp,bp){
   const ps=bp?((bp.sys<130&&bp.dia<85)?5:(bp.sys<140&&bp.dia<90)?3:1):2.5;
   return {total:Math.max(0,Math.min(100,Math.round(hs+rs+dur+dp+vs+bs+ps))),
     parts:[['HRV',hs,35],['Resting HR',rs,20],['Sleep duration',dur,15],['Deep sleep',dp,5],
-      ['VO2max',vs,15],['Breathing',bs,5],['Blood pressure',ps,5]]};
+      ['VO2max',vs,15],['Blood pressure',ps,5]]};
 }
 let _hist=null;
 function scoreHistory(days){
@@ -1108,7 +1106,7 @@ function renderToday(){
         row('HR ceiling',pl.cap)+
       '</div></div>';
 
-  renderNotices();renderWellness();
+  renderNotices();
   const w=el('t-work');
   w.innerHTML='<div id="blk-a"></div><div id="blk-b"></div>';
   // Strength before endurance when both fall on one day: the order
@@ -1710,14 +1708,6 @@ function aeroConfirm(pelvic,mins){
 }
 
 /* ═══ 19. DAILY LOG ═══ */
-const HABITS=[['breath_am','Breathing, morning'],['breath_pm','Breathing, evening']];
-function renderWellness(){
-  const adh=DB.get('adherence_'+TODAY)||[];
-  el('t-wellness').innerHTML='<div class="card">'+
-    HABITS.map(([k,l])=>'<div class="srow" style="padding:11px 0"><div class="s-l">'+l+'</div>'+
-      '<div class="sw'+(adh.includes(k)?' on':'')+'" onclick="toggleHabit(\''+k+'\')"></div></div>').join('')+
-    '</div>';
-}
 function bpDue(){
   const last=(DB.get('bp_log')||[]).map(r=>r.date).sort().pop();
   if(!last)return true;
@@ -1745,11 +1735,6 @@ function setMaintenance(){
 function dismissMaintenance(){
   DB.set('maintenance_off_'+weekStart(),true);renderAll();
 }
-function toggleHabit(k){
-  let a=DB.get('adherence_'+TODAY)||[];
-  a=a.includes(k)?a.filter(x=>x!==k):[...a,k];
-  DB.set('adherence_'+TODAY,a);renderWellness();
-}
 function logWeight(){
   const v=parseFloat(el('in-weight').value);
   if(!v||v<35||v>250)return toast('Enter a weight in kg');
@@ -1767,6 +1752,179 @@ function logBp(){
 /* ═══ 20. PROGRESS ═══ */
 let progTab='health';
 function setProgTab(t){progTab=t;['health','body'].forEach(x=>el('pt-'+x).classList.toggle('on',x===t));renderProgress();}
+/* One chart for the whole arc. Each line is indexed to 100 at the start of
+   the window and flipped where lower is better, so "up" always means
+   "improving" - no mental translation per metric. */
+function smooth(ser,win){
+  const out=[];
+  for(let i=0;i<ser.length;i++){
+    const from=Math.max(0,i-win+1);
+    const v=ser.slice(from,i+1).map(e=>e[1]).filter(x=>x>0);
+    if(v.length)out.push([ser[i][0],v.reduce((a,b)=>a+b,0)/v.length]);
+  }
+  return out;
+}
+function journeyLines(days){
+  const defs=[
+    {label:'VO2max',col:'#4ADE80',ser:metricSeries('vo2_max',days+40),inv:false,win:7},
+    {label:'HRV',col:'#7DA6F0',ser:metricSeries('heart_rate_variability',days+40),inv:false,win:14},
+    {label:'Resting HR',col:'#FBBF24',ser:metricSeries('resting_heart_rate',days+40),inv:true,win:14},
+    {label:'Weight',col:'#F87171',ser:(DB.get('weight_log')||[]).map(r=>[r.date,r.kg]).sort((a,b)=>a[0].localeCompare(b[0])),inv:true,win:3}
+  ];
+  const from=addDays(TODAY,-days+1);
+  return defs.map(d=>{
+    const sm=smooth(d.ser,d.win).filter(e=>e[0]>=from);
+    if(sm.length<3)return null;
+    const base=sm[0][1];if(!base)return null;
+    const lastRaw=sm[sm.length-1][1];
+    return {label:d.label,col:d.col,baseRaw:base,lastRaw:lastRaw,
+      pts:sm.map(e=>[e[0], d.inv?(2-e[1]/base)*100:(e[1]/base)*100]),
+      pct:+(((d.inv?base/lastRaw:lastRaw/base)-1)*100).toFixed(1)};
+  }).filter(Boolean);
+}
+function journeyChart(days){
+  const lines=journeyLines(days);
+  if(!lines.length)return '<div class="card"><div class="muted">Not enough history yet.</div></div>';
+  const vo2=lines.filter(l=>l.label==='VO2max')[0];
+  setTimeout(()=>{drawJourney('c-journey',lines,days);drawBars('c-bars',days);},0);
+  return '<div class="card" style="padding:14px 12px 12px">'+
+    '<canvas id="c-journey" style="height:210px"></canvas>'+
+    '<canvas id="c-bars" style="height:62px;margin-top:2px"></canvas>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:9px;margin-top:10px">'+
+      lines.map(l=>'<div style="display:flex;align-items:center;gap:5px">'+
+        '<span style="width:10px;height:3px;background:'+l.col+';display:inline-block;border-radius:2px"></span>'+
+        '<span class="muted" style="font-size:10px">'+l.label+' <span style="color:'+(l.pct>0.5?'var(--green)':l.pct<-0.5?'var(--red)':'var(--t3)')+'">'+
+        (l.pct>0?'+':'')+l.pct+'%</span></span></div>').join('')+
+      '<div style="display:flex;align-items:center;gap:5px">'+
+        '<span style="width:10px;height:7px;background:#7DA6F0;opacity:.55;display:inline-block;border-radius:2px"></span>'+
+        '<span class="muted" style="font-size:10px">aerobic min / week</span></div>'+
+    '</div>'+
+    '<div class="muted" style="margin-top:9px;line-height:1.6">Everything indexed to 100 at the start and flipped where lower is better, so up is always improving. The bars underneath line up with the same weeks.'+
+      (vo2?' The dashed green line is VO2max 40.':'')+'</div>'+
+  '</div>';
+}
+function jgeom(w,h,days){
+  const L=30,R=8,T=10,B=18;
+  return {L,R,T,B,W:w-L-R,H:h-T-B,
+    t0:new Date(addDays(TODAY,-days+1)).getTime(),t1:new Date(TODAY).getTime()};
+}
+function drawJourney(id,lines,days){
+  const c=el(id);if(!c||!c.parentElement)return;
+  const w=c.parentElement.offsetWidth;if(!w||w<20){setTimeout(()=>drawJourney(id,lines,days),300);return;}
+  const dpr=window.devicePixelRatio||1,h=210;
+  c.width=w*dpr;c.height=h*dpr;
+  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
+  const g=jgeom(w,h,days);
+  const all=[];lines.forEach(l=>l.pts.forEach(p=>all.push(p[1])));
+  // keep the VO2max goal inside the frame
+  const vo2=lines.filter(l=>l.label==='VO2max')[0];
+  let goalIdx=null;
+  if(vo2&&vo2.baseRaw){goalIdx=(40/vo2.baseRaw)*100;all.push(goalIdx);}
+  let mn=Math.min.apply(null,all),mx=Math.max.apply(null,all);
+  const pad=Math.max(2,(mx-mn)*0.12);mn-=pad;mx+=pad;
+  const X=d=>g.L+((new Date(d).getTime()-g.t0)/Math.max(1,g.t1-g.t0))*g.W;
+  const Y=v=>g.T+g.H-((v-mn)/Math.max(0.001,mx-mn))*g.H;
+
+  // horizontal grid, labelled as percent from the start
+  x.font='9px "DM Mono",monospace';
+  const step=(mx-mn)>60?20:(mx-mn)>30?10:5;
+  for(let v=Math.ceil(mn/step)*step;v<=mx;v+=step){
+    const yy=Y(v);
+    x.strokeStyle=v===100?'#33333A':'#1C1C1F';x.lineWidth=1;
+    x.setLineDash(v===100?[3,3]:[]);
+    x.beginPath();x.moveTo(g.L,yy);x.lineTo(g.L+g.W,yy);x.stroke();x.setLineDash([]);
+    x.fillStyle=v===100?'#9A9AA5':'#5E5E68';x.textAlign='right';
+    x.fillText((v>100?'+':'')+(v-100)+'%',g.L-5,yy+3);
+  }
+  // month ticks
+  x.textAlign='center';x.fillStyle='#5E5E68';
+  const seen={};
+  for(let k=days-1;k>=0;k--){
+    const d=addDays(TODAY,-k),m=d.slice(0,7);
+    if(seen[m])continue;seen[m]=1;
+    const xx=X(d);if(xx<g.L+12||xx>g.L+g.W-6)continue;
+    x.strokeStyle='#1C1C1F';x.beginPath();x.moveTo(xx,g.T);x.lineTo(xx,g.T+g.H);x.stroke();
+    x.fillText(['','jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'][+m.slice(5)],xx,h-5);
+  }
+  // VO2max goal
+  if(goalIdx!==null){
+    x.strokeStyle='#4ADE80';x.globalAlpha=.45;x.setLineDash([4,4]);x.lineWidth=1;
+    x.beginPath();x.moveTo(g.L,Y(goalIdx));x.lineTo(g.L+g.W,Y(goalIdx));x.stroke();
+    x.setLineDash([]);x.globalAlpha=1;
+    x.fillStyle='#4ADE80';x.textAlign='left';x.globalAlpha=.7;
+    x.fillText('VO2max 40',g.L+g.W-46,Y(goalIdx)-5);x.globalAlpha=1;
+  }
+  lines.forEach(l=>{
+    if(l.label==='VO2max'){            // the goal metric gets a filled area
+      x.beginPath();x.moveTo(X(l.pts[0][0]),Y(l.pts[0][1]));
+      l.pts.forEach(p=>x.lineTo(X(p[0]),Y(p[1])));
+      x.lineTo(X(l.pts[l.pts.length-1][0]),g.T+g.H);x.lineTo(X(l.pts[0][0]),g.T+g.H);x.closePath();
+      const gr=x.createLinearGradient(0,g.T,0,g.T+g.H);
+      gr.addColorStop(0,'rgba(74,222,128,.18)');gr.addColorStop(1,'rgba(74,222,128,0)');
+      x.fillStyle=gr;x.fill();
+    }
+    x.beginPath();
+    l.pts.forEach((p,i)=>i?x.lineTo(X(p[0]),Y(p[1])):x.moveTo(X(p[0]),Y(p[1])));
+    x.strokeStyle=l.col;x.lineWidth=l.label==='VO2max'?2.6:1.8;x.lineJoin='round';x.stroke();
+    const last=l.pts[l.pts.length-1];
+    x.beginPath();x.arc(X(last[0]),Y(last[1]),3,0,7);x.fillStyle=l.col;x.fill();
+  });
+}
+/* Bars share the arc's x-axis, so cause sits under effect. */
+function drawBars(id,days){
+  const c=el(id);if(!c||!c.parentElement)return;
+  const w=c.parentElement.offsetWidth;if(!w||w<20){setTimeout(()=>drawBars(id,days),300);return;}
+  const dpr=window.devicePixelRatio||1,h=62;
+  c.width=w*dpr;c.height=h*dpr;
+  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
+  const g=jgeom(w,h,days);
+  const weeks=Math.ceil(days/7)+1, bars=trainingBars(weeks);
+  const max=Math.max(30,...bars.map(v=>v.mins));
+  const bw=Math.max(4,(g.W/weeks)-3);
+  const X=d=>g.L+((new Date(d).getTime()-g.t0)/Math.max(1,g.t1-g.t0))*g.W;
+  x.font='9px "DM Mono",monospace';x.textAlign='right';x.fillStyle='#5E5E68';
+  x.fillText('min',g.L-5,14);
+  bars.forEach(v=>{
+    const xx=X(v.start);if(xx<g.L-bw||xx>g.L+g.W)return;
+    const hh=Math.round(v.mins/max*34);
+    x.fillStyle='#7DA6F0';x.globalAlpha=v.mins?.55:.12;
+    x.fillRect(xx,40-hh,bw,Math.max(2,hh));x.globalAlpha=1;
+    for(let i=0;i<3;i++){
+      x.fillStyle=i<v.str?'#4ADE80':'#232327';
+      x.beginPath();x.arc(xx+bw/2,48+i*5,1.8,0,7);x.fill();
+    }
+  });
+  x.fillStyle='#5E5E68';x.textAlign='right';x.fillText('sess',g.L-5,54);
+}
+/* The training that produced it. */
+function trainingBars(weeks){
+  const out=[];
+  for(let i=weeks-1;i>=0;i--){
+    const start=addDays(weekStart(),-7*i), end=addDays(start,6);
+    const aer=aeroLog().filter(a=>a.date>=start&&a.date<=end);
+    const str=sessions().filter(v=>v.date>=start&&v.date<=end&&!v.skipped&&['push','pull','legs'].indexOf(v.type)!==-1).length;
+    out.push({start,mins:aer.reduce((a,b)=>a+(b.minutes||0),0),str,blocks:aer.length});
+  }
+  return out;
+}
+function trainingCard(){
+  const b=trainingBars(10);
+  if(!b.some(v=>v.mins||v.str))return '';
+  const max=Math.max(30,...b.map(v=>v.mins));
+  return '<div class="card" style="padding:14px">'+
+    '<div style="display:flex;align-items:flex-end;gap:4px;height:78px">'+
+      b.map(v=>'<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">'+
+        '<div style="height:'+Math.round(v.mins/max*60)+'px;background:#7DA6F0;border-radius:3px 3px 0 0;opacity:'+(v.mins?0.85:0.15)+'"></div>'+
+        '<div style="display:flex;gap:2px;margin-top:4px;justify-content:center">'+
+          [0,1,2].map(i=>'<span style="width:4px;height:4px;border-radius:50%;background:'+(i<v.str?'#4ADE80':'#232327')+'"></span>').join('')+
+        '</div></div>').join('')+
+    '</div>'+
+    '<div class="row" style="margin-top:8px"><span class="muted" style="font-size:9px">10 weeks ago</span>'+
+    '<span class="muted" style="font-size:9px">this week</span></div>'+
+    '<div class="muted" style="margin-top:8px;line-height:1.6">Bars are aerobic minutes a week, dots are strength sessions. This is the input; the chart above is the result.</div>'+
+  '</div>';
+}
+
 let progRange=90;
 function setRange(n){progRange=n;renderProgress();}
 function rangeBar(){
@@ -1803,12 +1961,15 @@ function monthlyTable(){
 /* Four tiles answer "which way am I going" in one glance;
    the full chart is one tap away instead of always on screen. */
 let progOpen=null;
-function trend28(name){
-  const ser=metricSeries(name,120);
-  if(ser.length<2)return null;
-  const now=ser[ser.length-1][1];
-  const before=ser.filter(e=>e[0]<=addDays(TODAY,-28)).pop();
-  return before?+(now-before[1]).toFixed(2):null;
+/* A single morning against a single morning four weeks ago is noise.
+   Compare the 7-day mean with the 7-day mean that ended back then. */
+function trend28(name,ser){
+  const S2=ser||metricSeries(name,150);
+  if(S2.length<10)return null;
+  const now=mean(winVals(S2,TODAY,7));
+  const then=mean(winVals(S2,addDays(TODAY,-28),7));
+  if(!now||!then)return null;
+  return +(now-then).toFixed(2);
 }
 function tile(key,label,cur,unit,delta,better,dec){
   const open=progOpen===key;
@@ -1861,7 +2022,7 @@ function renderProgress(){
         data:vals('resting_heart_rate',R),name:'Resting HR'},
       vo2:{label:'VO2max',cur:S.vo2,unit:'',d:trend28('vo2_max'),better:'up',dec:1,
         data:vals('vo2_max',R),name:'VO2max'},
-      sleep:{label:'Sleep',cur:mean(sleepRecords().slice(-7).map(x=>x.totalSleep||0)),unit:'h',d:null,better:'up',dec:1,
+      sleep:{label:'Sleep',cur:mean(sleepRecords().slice(-7).map(x=>x.totalSleep||0)),unit:'h',d:trend28('',sleepSeries()),better:'up',dec:1,
         data:sleepRecords().slice(-R).map(x=>x.totalSleep||0).filter(x=>x>0),name:'Sleep'}
     };
     const moving=Object.values(M).filter(m=>m.d!==null&&Math.abs(m.d)>=(m.dec?0.3:0.5));
@@ -1874,6 +2035,8 @@ function renderProgress(){
 
     b.innerHTML=
       '<div class="card" style="margin-bottom:12px"><div class="muted" style="line-height:1.6">'+h(verdict)+'</div></div>'+
+      '<div class="sec" style="margin-top:4px">The arc</div>'+journeyChart(progRange<90?90:progRange)+
+      '<div class="sec">Right now</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 16px 12px">'+
         tile('hrv',M.hrv.label,M.hrv.cur,M.hrv.unit,M.hrv.d,'up',1)+
         tile('rhr',M.rhr.label,M.rhr.cur,M.rhr.unit,M.rhr.d,'down',0)+
@@ -1958,11 +2121,30 @@ function fitnessMonthTable(){
 function fitnessCard(){
   const F=S.fit;
   if(!F)return '<div class="card"><div class="muted">Not enough data yet.</div></div>';
-  const r=F.raw;
+  const r=F.raw, months=fitnessMonths();
+  const col=F.total>=75?'var(--green)':F.total>=50?'var(--t1)':'var(--yellow)';
+  const first=months.length?months[0]:null;
+  const drift=first?F.total-first.total:null;
+  if(months.length>1)setTimeout(()=>drawMonthBars('c-fitmo',months),0);
+  // how far VO2max still has to go
+  const vlo=32,vhi=44,goal=40;
+  const pct=v=>Math.max(0,Math.min(100,(v-vlo)/(vhi-vlo)*100));
   return '<div class="card">'+
     '<div class="row" style="align-items:flex-end;margin-bottom:12px">'+
-      '<div style="font-family:\'Instrument Serif\',serif;font-size:38px;color:'+(F.total>=75?'var(--green)':F.total>=50?'var(--t1)':'var(--yellow)')+'">'+F.total+'</div>'+
-      '<div class="muted" style="text-align:right;max-width:62%;line-height:1.6">How fit and healthy you are. Moves over months \u2014 do not read it daily.</div></div>'+
+      '<div><div style="font-family:\'Instrument Serif\',serif;font-size:38px;color:'+col+'">'+F.total+'</div>'+
+      '<div class="muted" style="margin-top:2px">'+(drift===null?'':(drift>0?'+':'')+drift+' since '+first.month)+'</div></div>'+
+      '<div class="muted" style="text-align:right;max-width:58%;line-height:1.6">How fit you are. Moves over months \u2014 do not read it daily.</div></div>'+
+    (months.length>1?'<canvas id="c-fitmo" style="height:74px;margin-bottom:12px"></canvas>':'')+
+    (r.vo2?'<div style="margin-bottom:14px">'+
+      '<div class="row" style="margin-bottom:5px"><span class="muted">VO2max to target</span>'+
+      '<span class="muted">'+r.vo2.toFixed(1)+' \u2192 40 \u00B7 '+(40-r.vo2).toFixed(1)+' to go</span></div>'+
+      '<div style="height:8px;background:var(--bg3);border-radius:4px;position:relative;overflow:hidden">'+
+        '<div style="position:absolute;left:0;top:0;bottom:0;width:'+pct(r.vo2)+'%;background:var(--green);opacity:.75"></div>'+
+        '<div style="position:absolute;left:'+pct(goal)+'%;top:-2px;bottom:-2px;width:2px;background:var(--t1)"></div>'+
+      '</div>'+
+      '<div class="row" style="margin-top:3px"><span class="muted" style="font-size:9px">32</span>'+
+      '<span class="muted" style="font-size:9px">goal 40</span>'+
+      '<span class="muted" style="font-size:9px">44</span></div></div>':'')+
     F.parts.map(([l,v,m])=>
       '<div style="margin-bottom:8px"><div class="row" style="margin-bottom:3px"><span class="muted">'+l+'</span>'+
       '<span class="muted">'+(v===null?'no data':Math.round(v)+' / '+m)+'</span></div>'+
@@ -1972,7 +2154,29 @@ function fitnessCard(){
       (r.rhr30?'\u00B7 resting HR '+r.rhr30.toFixed(0)+' ':'')+(r.bp?'\u00B7 BP '+r.bp.sys+'/'+r.bp.dia:'')+
       '. Judged against health norms, not your own range.</div></div>';
 }
-/* Where the score has been, not just where it is. */
+function drawMonthBars(id,months){
+  const c=el(id);if(!c||!c.parentElement)return;
+  const w=c.parentElement.offsetWidth;if(!w||w<20){setTimeout(()=>drawMonthBars(id,months),300);return;}
+  const dpr=window.devicePixelRatio||1,h=74;
+  c.width=w*dpr;c.height=h*dpr;
+  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
+  const L=2,R=2,T=4,B=16,W=w-L-R,H=h-T-B;
+  const mx=Math.max(70,...months.map(m=>m.total));
+  const bw=Math.min(46,(W/months.length)-8);
+  x.font='9px "DM Mono",monospace';x.textAlign='center';
+  months.forEach((m,i)=>{
+    const xx=L+(W/months.length)*i+((W/months.length)-bw)/2;
+    const hh=Math.round(m.total/mx*H);
+    const prev=i?months[i-1].total:null;
+    x.fillStyle=prev===null?'#5E5E68':m.total>prev?'#4ADE80':m.total<prev?'#F87171':'#9A9AA5';
+    x.globalAlpha=i===months.length-1?1:.7;
+    x.fillRect(xx,T+H-hh,bw,hh);x.globalAlpha=1;
+    x.fillStyle='#0A0A0B';x.fillText(m.total,xx+bw/2,T+H-hh+12);
+    x.fillStyle='#5E5E68';x.fillText(m.month.slice(5),xx+bw/2,h-4);
+  });
+}
+/* Where the score has been, not just where it is: one bar a day,
+   coloured by band, with the band edges drawn in. */
 function scoreCard(){
   const hist=scoreHistory(60);
   if(hist.length<2)
@@ -1982,97 +2186,50 @@ function scoreCard(){
   const wk=hist.filter(x=>x.date<=addDays(TODAY,-7)).pop();
   const mo=hist.filter(x=>x.date<=addDays(TODAY,-28)).pop();
   const dW=wk?now-wk.score:null, dM=mo?now-mo.score:null;
-  const dcol=d=>d===null?'var(--t3)':d>=2?'var(--green)':d<=-2?'var(--red)':'var(--t2)';
+  const dcol=d=>d===null?'var(--t3)':d>=3?'var(--green)':d<=-3?'var(--yellow)':'var(--t2)';
   const dtxt=d=>d===null?'\u2014':(d>0?'+':'')+d;
-  const lights=hist.slice(-30).map(x=>
-    '<div title="'+x.date+' \u00B7 '+x.score+'" style="flex:1;height:22px;border-radius:3px;background:'+scoreColour(x.score)+';opacity:'+
-    (x.date===TODAY?'1':'.55')+'"></div>').join('');
-  setTimeout(()=>{const c=el('c-score');if(c){c.dataset.h=54;sparkline('c-score',hist.map(x=>x.score),'#9A9AA5');}},0);
+  const avg30=Math.round(mean(hist.slice(-30).map(x=>x.score)));
+  setTimeout(()=>drawScoreBars('c-score',hist.slice(-30)),0);
   return '<div class="card">'+
     '<div class="row" style="align-items:flex-end;margin-bottom:12px">'+
       '<div><div style="font-family:\'Instrument Serif\',serif;font-size:38px;color:'+scoreColour(now)+'">'+now+'</div>'+
-      '<div class="muted" style="margin-top:2px">'+scoreWord(now)+'</div></div>'+
-      '<div style="text-align:right"><div class="muted">week <span style="color:'+dcol(dW)+'">'+dtxt(dW)+'</span></div>'+
-      '<div class="muted" style="margin-top:3px">month <span style="color:'+dcol(dM)+'">'+dtxt(dM)+'</span></div></div>'+
+      '<div class="muted" style="margin-top:2px">'+scoreWord(now)+' \u00B7 30-day average '+avg30+'</div></div>'+
+      '<div style="text-align:right"><div class="muted">vs last week <span style="color:'+dcol(dW)+'">'+dtxt(dW)+'</span></div>'+
+      '<div class="muted" style="margin-top:3px">vs 4 weeks <span style="color:'+dcol(dM)+'">'+dtxt(dM)+'</span></div></div>'+
     '</div>'+
-    '<div style="display:flex;gap:2px;margin-bottom:8px">'+lights+'</div>'+
-    '<div class="row"><span class="muted" style="font-size:9px">30 days ago</span><span class="muted" style="font-size:9px">today</span></div>'+
-    '<canvas id="c-score" style="height:54px;margin-top:12px"></canvas>'+
-    '<div class="row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">'+
-      '<span class="muted" style="font-size:9px;color:var(--red)">\u25A0 &lt;55 low</span>'+
-      '<span class="muted" style="font-size:9px;color:var(--yellow)">\u25A0 55\u201369</span>'+
-      '<span class="muted" style="font-size:9px;color:var(--t1)">\u25A0 70\u201384 normal</span>'+
-      '<span class="muted" style="font-size:9px;color:var(--green)">\u25A0 85+</span></div>'+
-    '</div>';
+    '<canvas id="c-score" style="height:96px"></canvas>'+
+    '<div class="row" style="margin-top:7px">'+
+      '<span class="muted" style="font-size:9px">30 days ago</span>'+
+      '<span class="muted" style="font-size:9px;color:var(--green)">85+ strong</span>'+
+      '<span class="muted" style="font-size:9px">70\u201384 normal</span>'+
+      '<span class="muted" style="font-size:9px;color:var(--yellow)">55\u201369</span>'+
+      '<span class="muted" style="font-size:9px">today</span></div>'+
+  '</div>';
 }
-/* How fast the weight is actually coming off, over several windows. */
-function weightTrends(){
-  const w=(DB.get('weight_log')||[]).slice().sort((a,b)=>a.date.localeCompare(b.date));
-  if(w.length<2)return null;
-  const now=w[w.length-1];
-  const at=days=>{const cut=addDays(TODAY,-days);const p=w.filter(r=>r.date<=cut);return p.length?p[p.length-1]:null;};
-  const rows=[[7,'7 days'],[30,'30 days'],[90,'90 days']].map(function(x){
-    const p=at(x[0]); if(!p)return null;
-    const span=daysBetween(p.date,now.date)||1;
-    const diff=now.kg-p.kg;
-    return {label:x[1],from:p.kg,diff:+diff.toFixed(1),perWeek:+(diff/span*7).toFixed(2)};
-  }).filter(Boolean);
-  const first=w[0], spanAll=daysBetween(first.date,now.date)||1;
-  return {now:now.kg,rows,n:w.length,all:{from:first.kg,date:first.date,
-    diff:+(now.kg-first.kg).toFixed(1),perWeek:+((now.kg-first.kg)/spanAll*7).toFixed(2)}};
-}
-function weightCard(){
-  const t=weightTrends();
-  if(!t)return '<div class="card"><div class="muted">Log your weight a few times and the rate appears here.</div></div>';
-  const col=function(d){return d<-0.1?'var(--green)':d>0.1?'var(--red)':'var(--t2)';};
-  return '<div class="card">'+
-    '<div class="row" style="align-items:flex-end;margin-bottom:12px">'+
-      '<div><div style="font-family:\'Instrument Serif\',serif;font-size:32px">'+t.now.toFixed(1)+
-      '<span style="font-size:11px;color:var(--t3)"> kg</span></div>'+
-      '<div class="muted" style="margin-top:2px">'+t.n+' readings since '+t.all.date+'</div></div>'+
-      '<div style="text-align:right"><div style="color:'+col(t.all.perWeek)+';font-size:13px">'+
-      (t.all.diff>0?'+':'')+t.all.diff+' kg total</div><div class="muted">'+
-      (t.all.perWeek>0?'+':'')+t.all.perWeek+' kg / week</div></div></div>'+
-    t.rows.map(function(r){return '<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)">'+
-      '<span class="muted">last '+r.label+'</span>'+
-      '<span style="font-size:11px">'+r.from.toFixed(1)+' \u2192 '+t.now.toFixed(1)+
-      ' <span style="color:'+col(r.perWeek)+'">'+(r.diff>0?'+':'')+r.diff+'</span>'+
-      ' <span class="muted">'+(r.perWeek>0?'+':'')+r.perWeek+'/wk</span></span></div>';}).join('')+
-    '<div class="muted" style="margin-top:9px;line-height:1.6">Half a kilo a week is the sustainable rate \u2014 faster costs muscle.</div>'+
-    '</div>';
-}
-function miniTile(label,val,unit,delta,better){
-  let col='var(--t2)',extra='';
-  if(delta!==null&&delta!==undefined&&Math.abs(delta)>=0.3){
-    const good=better==='down'?delta<0:delta>0;
-    col=good?'var(--green)':'var(--red)';
-    extra='<div style="color:'+col+';font-size:10px;margin-top:3px">'+(delta>0?'+':'')+delta.toFixed(1)+'</div>';
-  }
-  return '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:11px 10px">'+
-    '<div class="muted" style="font-size:8px;letter-spacing:.1em;text-transform:uppercase">'+label+'</div>'+
-    '<div style="font-family:\'Instrument Serif\',serif;font-size:20px;margin-top:4px">'+val+
-      (unit?'<span style="font-size:9px;color:var(--t3)"> '+unit+'</span>':'')+'</div>'+extra+'</div>';
-}
-/* Only exercises you have actually loaded, newest first. */
-function weightsTable(){
-  const log=realSessions().slice(-30),byEx={};
-  log.forEach(x=>Object.entries(x.exercises||{}).forEach(([id,sets])=>{
-    const done=sets.filter(y=>y.done&&y.kg>0).map(y=>y.kg);
-    if(done.length)(byEx[id]=byEx[id]||[]).push({d:x.date,kg:Math.max.apply(null,done)});
-  }));
-  const rows=Object.entries(byEx).map(([id,v])=>{
-    const e=EX_DB[id];if(!e)return '';
-    const now=v[v.length-1],first=v[0];
-    const d=now.kg-first.kg;
-    return {name:e.name,kg:now.kg,d:d,date:now.d};
-  }).filter(Boolean).sort((a,b)=>b.date.localeCompare(a.date));
-  if(!rows.length)return '<div class="card"><div class="muted">Log a few loaded sessions first.</div></div>';
-  return '<div class="card">'+rows.map(r=>
-    '<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">'+
-    '<span style="font-size:11px">'+h(r.name)+'</span>'+
-    '<span style="font-size:11px">'+r.kg+' kg'+
-      (Math.abs(r.d)>=0.5?' <span style="color:'+(r.d>0?'var(--green)':'var(--t3)')+'">'+(r.d>0?'+':'')+r.d.toFixed(1)+'</span>':'')+
-    '</span></div>').join('')+'</div>';
+function drawScoreBars(id,hist){
+  const c=el(id);if(!c||!c.parentElement)return;
+  const w=c.parentElement.offsetWidth;if(!w||w<20){setTimeout(()=>drawScoreBars(id,hist),300);return;}
+  const dpr=window.devicePixelRatio||1,h=96;
+  c.width=w*dpr;c.height=h*dpr;
+  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
+  const L=24,R=4,T=6,B=6,W=w-L-R,H=h-T-B;
+  const lo=40,hi=100;
+  const Y=v=>T+H-((Math.max(lo,Math.min(hi,v))-lo)/(hi-lo))*H;
+  x.font='9px "DM Mono",monospace';x.textAlign='right';
+  [55,70,85].forEach(v=>{
+    x.strokeStyle='#232327';x.lineWidth=1;x.setLineDash([2,3]);
+    x.beginPath();x.moveTo(L,Y(v));x.lineTo(L+W,Y(v));x.stroke();x.setLineDash([]);
+    x.fillStyle='#5E5E68';x.fillText(v,L-4,Y(v)+3);
+  });
+  const bw=Math.max(2,(W/hist.length)-2);
+  hist.forEach((d,i)=>{
+    const xx=L+i*(W/hist.length);
+    const col=d.score>=85?'#4ADE80':d.score>=70?'#9A9AA5':d.score>=55?'#FBBF24':'#F87171';
+    x.fillStyle=col;x.globalAlpha=(i===hist.length-1)?1:.75;
+    const yy=Y(d.score);
+    x.fillRect(xx,yy,bw,Math.max(2,(T+H)-yy));
+    x.globalAlpha=1;
+  });
 }
 function volumePanel(){
   const now=weeklyVolume(0),prev=weeklyVolume(1);
@@ -2159,7 +2316,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v8.1 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v8.5 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -2186,7 +2343,7 @@ function openDiag(){
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v8.0')+
+      diagRow('App version','v8.5')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
