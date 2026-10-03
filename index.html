@@ -466,6 +466,36 @@ function belowBandStreak(src,band){
   return n;
 }
 
+/* Days in a row with real activity \u2014 not just logged strength sessions.
+   A week of 60-90 active minutes is load, whatever you call it. */
+function activeDays(){
+  const ex=Object.fromEntries(metricSeries('apple_exercise_time',30));
+  let n=0,d=TODAY;
+  if(!(ex[d]>=40))d=addDays(d,-1);
+  for(let i=0;i<21;i++){
+    if(ex[d]>=40){n++;d=addDays(d,-1);}else break;
+  }
+  return n;
+}
+/* Breathing rate at night is the earliest systemic-stress signal there is.
+   It left the score, but it belongs in the daily call. */
+function respState(){
+  const ser=metricSeries('respiratory_rate',60);
+  const st=bandStats(winVals(ser,TODAY,60));
+  if(!st)return null;
+  const b=bandOf(st);
+  const last4=winVals(ser,TODAY,4);
+  const hi=last4.filter(v=>v>b[1]).length;
+  const peak=last4.length?Math.max.apply(null,last4):0;
+  return {band:b,today:last4.length?last4[last4.length-1]:0,peak,daysHigh:hi,n:last4.length};
+}
+/* This week's active minutes against your own four-week average. */
+function loadRatio(){
+  const ex=metricSeries('apple_exercise_time',35);
+  const wk=mean(winVals(ex,TODAY,7)), base=mean(winVals(ex,TODAY,28));
+  if(!wk||!base)return null;
+  return +(wk/base).toFixed(2);
+}
 function derive(){
   const hrvS=metricSeries('heart_rate_variability',60);
   const hrvV=hrvS.map(e=>e[1]);
@@ -495,6 +525,9 @@ function derive(){
   S.rhrBand=S.rec&&S.rec.rhrBand;
   S.hrvZtoday=S.rec?zOf(S.hrv,S.rec.hrvStats):null;
   S.belowStreak=belowBandStreak(src,S.hrvBand);
+  S.activeDays=activeDays();
+  S.resp=respState();
+  S.loadRatio=loadRatio();
   S.verdict=decideDay();
   S.score=S.rec?{total:S.rec.total,parts:S.rec.parts}:calcScore();
 }
@@ -568,6 +601,14 @@ function decideDay(){
   if(S.tempDev>0.5){k='rest';why.push('Wrist temp +'+S.tempDev.toFixed(2)+'\u00B0C over your own baseline');}
   else if(S.hrv<25){k='rest';why.push('HRV '+Math.round(S.hrv)+' ms — below your floor');}
   else if(S.consec>=2){k='rest';why.push(S.consec+' training days back to back');}
+  else if(S.activeDays>=6&&!DB.get('override_rest_'+TODAY)){
+    return {k:'rest',soft:false,
+      why:[S.activeDays+' active days in a row \u2014 take a real one off'],plan:PLANS.rest};
+  }
+  else if(S.resp&&S.resp.daysHigh>=2){
+    return {k:'ease',why:['Night breathing up to '+S.resp.peak.toFixed(1)+'/min on '+S.resp.daysHigh+
+      ' of 4 nights, over your normal '+S.resp.band[0].toFixed(1)+'\u2013'+S.resp.band[1].toFixed(1)],plan:PLANS.ease};
+  }
   else if(S.consec===1&&!DB.get('override_rest_'+TODAY)){
     const yl=sessionLoad(addDays(TODAY,-1));
     if(yl<10){
@@ -590,6 +631,8 @@ function decideDay(){
       else if(RB&&S.rec.rhr7>RB[1]+2){k='ease';why.push('Resting HR '+S.rec.rhr7.toFixed(0)+' bpm, above your normal band');}
       else if(S.hrv7>=B[0]&&S.hrv>=B[0]&&(!RB||S.rec.rhr7<=RB[1])&&S.consec===0){
         k='room';why.push(S.hrv>S.hrvBand[1]?'HRV above your normal band, resting HR normal':'HRV inside your band, resting HR normal');}
+      else if(S.loadRatio&&S.loadRatio>=1.4){k='ease';
+        why.push('This week is '+Math.round((S.loadRatio-1)*100)+'% above your usual load');}
       else if(S.belowStreak>=1){why.push('HRV below your band today \u2014 one day means little, train as planned');}
       else why.push('Inside your normal band');
     } else {
@@ -1156,6 +1199,15 @@ function vo2Line(){
 }
 function renderNotices(){
   const out=[];
+  if(S.activeDays>=4||(S.resp&&S.resp.daysHigh>=2)||(S.loadRatio&&S.loadRatio>=1.4)){
+    const bits=[];
+    if(S.activeDays>=4)bits.push(S.activeDays+' active days in a row');
+    if(S.resp&&S.resp.daysHigh>=2)bits.push('night breathing up on '+S.resp.daysHigh+' of 4 nights');
+    if(S.loadRatio&&S.loadRatio>=1.4)bits.push('weekly load '+Math.round((S.loadRatio-1)*100)+'% over your usual');
+    out.push('<div class="note" style="border-color:rgba(251,191,36,.25);background:var(--yd)">'+
+      '<b style="color:var(--yellow)">Load piling up</b><span class="muted">'+h(bits.join(' \u00B7 '))+
+      '. A full day off costs you nothing and settles all three.</span></div>');
+  }
   const vl=vo2Line(); if(vl)out.push(vl);
   if(maintenanceMode()){
     const w=weeksSinceTraining();
@@ -2494,7 +2546,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v8.7 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v8.8 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -2521,7 +2573,7 @@ function openDiag(){
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v8.7')+
+      diagRow('App version','v8.8')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
