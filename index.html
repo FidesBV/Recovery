@@ -1924,12 +1924,15 @@ function renderAerobic(slot){
 
   if(!isAeroDay()&&!done){
     const P=S.plan||{};
+    const noWork=!(DB.get('health_workouts')||[]).length&&!!DB.get('health_uploaded');
     const reason=(P.off||[]).filter(x=>/aerobic/i.test(x))[0]
       ||(aeroYesterday()?'You did one yesterday \u2014 a day between blocks'
         :count>=AERO_TARGET?'Both blocks done this week':'Not today');
     wrap.innerHTML=lead+'<div class="card"><div class="row">'+
       '<div style="flex:1"><div class="muted" style="color:var(--t3)">\u2715 '+h(reason)+'</div></div>'+
       '<div class="muted" style="color:'+(count>=AERO_TARGET?'var(--green)':'var(--t3)')+'">'+count+' / '+AERO_TARGET+'</div></div>'+
+      (noWork?'<div class="muted" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);color:var(--yellow);line-height:1.6">'+
+        'This count may be wrong \u2014 your export carries no workouts, so rides and runs are invisible to the app. See Settings.</div>':'')+
       aeroWeekList()+'</div>';
     return;
   }
@@ -2969,7 +2972,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v9.3 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v9.4 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -2996,17 +2999,23 @@ const METRIC_WHY={apple_exercise_time:'the week bars, your active-day streak and
    fired. Say which switch to flip, in the app's own words. */
 function missingNote(){
   const miss=missingMetrics();
+  const noWork=!(DB.get('health_workouts')||[]).length&&!!DB.get('health_uploaded');
   const nice=['blood_oxygen_saturation','breathing_disturbances'].filter(k=>{
     const m=DB.get('health_metrics')||{};return !m[k]||!m[k].length;});
-  if(!miss.length&&!nice.length)return '';
+  if(!miss.length&&!nice.length&&!noWork)return '';
   const line=k=>'<div style="padding:2px 0">\u2022 '+h(METRIC_NAME[k]||k)+
     (METRIC_WHY[k]?' <span style="color:var(--t3)">\u2014 '+METRIC_WHY[k]+'</span>':'')+'</div>';
   return '<div class="muted" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);line-height:1.6">'+
+    (noWork?'<div style="color:var(--yellow)">No workouts in your export</div>'+
+      '<div style="padding:2px 0;color:var(--t3)">Your rides and runs cannot be detected, so the aerobic count stays at zero. '+
+      'Workouts are a separate Datatype in Health Auto Export \u2014 export them too, or set the Datatype to include them.</div>'+
+      (miss.length||nice.length?'<div style="height:7px"></div>':''):'')+
     (miss.length?'<span style="color:var(--yellow)">Not arriving in your export</span>'+
       miss.map(line).join(''):'')+
     (nice.length?'<div style="margin-top:'+(miss.length?'7px':'0')+'"><span style="color:var(--t2)">Worth adding</span>'+
       nice.map(line).join('')+'</div>':'')+
-    '<div style="margin-top:7px;color:var(--t3)">Turn these on in Health Auto Export before the next export, then import again.</div></div>';
+    ((miss.length||nice.length)?'<div style="margin-top:7px;color:var(--t3)">Turn these on in Health Auto Export before the next export, then import again.</div>':'')+
+    '</div>';
 }
 function storageUsed(){
   let n=0;try{Object.keys(localStorage).filter(k=>k.startsWith(P)).forEach(k=>n+=localStorage.getItem(k).length);}catch(e){}
@@ -3027,7 +3036,7 @@ function openDiag(){
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v9.3')+
+      diagRow('App version','v9.4')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
