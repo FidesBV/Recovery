@@ -147,6 +147,13 @@ input:focus{border-color:var(--line2);}
 .wk>div.now .trk{background:rgba(255,255,255,.06);}
 .wk .fil{width:100%;border-radius:3px;min-height:2px;}
 .wk-sum{margin:7px 16px 12px;display:flex;justify-content:space-between;align-items:baseline;}
+.chips{display:flex;flex-wrap:wrap;gap:6px;}
+.chips button{padding:8px 11px;border-radius:20px;border:1px solid var(--line);background:transparent;
+  color:var(--t3);font-size:11px;font-family:inherit;cursor:pointer;}
+.chips button.on{border-color:var(--line2);background:var(--bg3);color:var(--t1);}
+.chips button.warn.on{border-color:rgba(251,191,36,.4);background:var(--yd);color:var(--yellow);}
+#feel-note{width:100%;background:var(--bg3);border:1px solid var(--line);border-radius:9px;
+  padding:10px;color:var(--t1);font-size:12px;font-family:inherit;resize:none;margin-top:9px;}
 .hgrid i{aspect-ratio:1;border-radius:3px;background:var(--bg3);}
 .hgrid i.s{background:var(--green);opacity:.75;}
 .hgrid i.a{background:var(--blue);opacity:.75;}
@@ -202,6 +209,7 @@ nav b{display:block;font-size:15px;margin-bottom:3px;font-weight:400;}
   </div>
   <div id="t-week"></div>
   <div id="t-verdict"></div>
+  <div id="t-feel"></div>
   <div id="t-notices"></div>
   <div id="t-work"></div>
   <div class="sec">Signals</div>
@@ -587,6 +595,15 @@ function stressFlag(){
    One action a day. The verdict decides how hard; this decides what. And
    it names what is deliberately NOT happening, because that is half the
    instruction. */
+/* Echo his own words back, so a quieter day never looks arbitrary. */
+function feelWhy(){
+  const f=feelOf().chips, out=[];
+  const say={sleep:'You said you slept badly',flat:'You said you have no energy',
+    legs:'You said your legs are heavy',feet:'You said your feet are sore',
+    ill:'You said something may be coming on',tense:'You said you feel tense'};
+  ['ill','sleep','flat','legs','feet'].forEach(k=>{if(f.indexOf(k)>=0&&out.length<2)out.push(say[k]);});
+  return out;
+}
 function dayPlan(){
   const v=S.verdict, k=v.k;
   const gap=(function(){const l=realSessions().map(x=>x.date).sort().pop();
@@ -607,22 +624,26 @@ function dayPlan(){
       why:v.why,off:['No intervals while flying blind'],cap:cap};
 
   // 2. Breathing up means intensity out — cardio, not a moderate lift.
-  const noIntensity=(k==='ease'||k==='deload')||(S.resp&&S.resp.daysHigh>=2);
+  const noIntensity=(k==='ease'||k==='deload')||(S.resp&&S.resp.daysHigh>=2)||
+    feelHas('ill')||feelHas('sleep')||feelHas('flat');
   // 3. Strength decays on a clock; aerobic does not. The longer gap wins.
   const wantStrength=gap>=7&&k!=='rest';
   const wantAero=aerLeft>0&&!aeroYesterday()&&!noIntensity;
 
   if(wantStrength){
-    const soft=noIntensity||k==='deload';
+    const soft=noIntensity||k==='deload'||feelHas('legs');
     off.push((S.resp&&S.resp.daysHigh>=2)?'No aerobic block — night breathing is up, so intensity comes out first'
       :noIntensity?'No aerobic block — keep the intensity down today'
       :aerLeft<=0?'Aerobic blocks already done this week':'Aerobic block tomorrow, not today');
     if(noIntensity)off.push('No intervals, nothing above '+cap);
+    if(feelHas('feet'))off.push('No running or rope — you flagged sore feet');
+    if(feelHas('legs'))off.push('Legs stay light — you flagged heavy legs');
     return {do:'strength',
       title:gap>=14?'Lift today':'Strength today',
       sub:soft?'Two sets per exercise instead of three, same weights':'Session as planned',
       why:[gap>=14?gap+' days since your last lift — the biggest gap you have':
             gap+' days since your last lift'].concat(
+           feelWhy(),
            S.hrvBand&&S.hrv>=S.hrvBand[0]?['HRV '+Math.round(S.hrv)+' ms is inside your band, so lifting is fine']:[],
            (S.resp&&S.resp.daysHigh>=2)?['Night breathing '+S.resp.peak.toFixed(1)+'/min on '+S.resp.daysHigh+
              ' of '+S.resp.n+' nights — that is a signal about intensity, not about weights']
@@ -641,6 +662,42 @@ function dayPlan(){
       why:v.why,off:['No intervals, nothing above '+cap],cap:cap};
   return {do:'strength',title:'Strength today',sub:v.plan.strength,
     why:v.why,off:aerLeft<=0?['Aerobic blocks done this week']:[],cap:cap};
+}
+/* ═══ HOW YOU FEEL ═══
+   His sharpest signals were always sentences \u2014 "leek of ik virus had",
+   "spierpijn in voetzolen", "zit hoog in hartslag" \u2014 and every one of
+   them lived in a chat window instead of the app. Taps drive the day's
+   call because they are unambiguous; the note travels to the summary,
+   where judgement happens. */
+const FEELS=[
+  {id:'ill',   label:'Coming down with something', warn:true},
+  {id:'sleep', label:'Slept badly',                warn:true},
+  {id:'legs',  label:'Heavy legs',                 warn:false},
+  {id:'feet',  label:'Sore feet',                  warn:false},
+  {id:'tense', label:'Tense',                      warn:false},
+  {id:'flat',  label:'No energy',                  warn:true}
+];
+function feelOf(d){const v=DB.get('feel_'+(d||TODAY));return v&&v.chips?v:{chips:[],note:''};}
+function feelHas(k){return feelOf().chips.indexOf(k)>=0;}
+function toggleFeel(k){
+  const f=feelOf(), i=f.chips.indexOf(k);
+  if(i>=0)f.chips.splice(i,1); else f.chips.push(k);
+  DB.set('feel_'+TODAY,f);
+  derive();renderToday();
+}
+function saveFeelNote(v){
+  const f=feelOf(); f.note=String(v||'').slice(0,400);
+  DB.set('feel_'+TODAY,f);
+}
+function renderFeel(){
+  const f=feelOf();
+  el('t-feel').innerHTML='<div class="card" style="margin-bottom:10px">'+
+    '<div class="muted" style="margin-bottom:9px">How do you feel? Tap what applies \u2014 it changes today\u2019s call.</div>'+
+    '<div class="chips">'+FEELS.map(x=>'<button class="'+(x.warn?'warn ':'')+
+      (f.chips.indexOf(x.id)>=0?'on':'')+'" onclick="toggleFeel(\''+x.id+'\')">'+h(x.label)+'</button>').join('')+'</div>'+
+    '<textarea id="feel-note" rows="2" placeholder="Anything else, in your own words \u2014 goes into the weekly summary" '+
+      'onblur="saveFeelNote(this.value)">'+h(f.note||'')+'</textarea>'+
+    '</div>';
 }
 function derive(){
   clearLoadCache();
@@ -677,6 +734,7 @@ function derive(){
   S.activeDays=activeDays();
   S.resp=respState();
   S.loadRatio=loadRatio();
+  S.feel=feelOf();
   S.stress=stressFlag();
   S.verdict=decideDay();
   S.plan=dayPlan();
@@ -758,6 +816,19 @@ function decideDay(){
   if(S.hrvAge>=3)return {k:'stale',stale:S.hrvAge,
     why:['Your last HRV reading is from '+S.hrvDate+' — '+S.hrvAge+' days old',
       'Import health data before trusting anything below'],plan:PLANS.stale};
+  /* "I feel like I'm coming down with something" plus any objective sign
+     is the combination that cost him a fortnight in October. On its own it
+     still pulls the intensity out — it is just not a rest order. */
+  const ill=feelHas('ill');
+  const objective=(S.tempDev>0.3)||(S.resp&&S.resp.daysHigh>=1)||
+    (S.hrvBand&&S.hrv&&S.hrv<S.hrvBand[0]);
+  if(ill&&objective)
+    return {k:'backoff',hard:true,why:[
+      'You said you feel like something is coming on',
+      S.tempDev>0.3?'Wrist temp +'+S.tempDev.toFixed(2)+'\u00B0C over baseline'
+        :(S.resp&&S.resp.daysHigh>=1)?'Night breathing up to '+S.resp.peak.toFixed(1)+'/min, over your normal'
+        :'HRV below your band',
+      'Your word plus a number agreeing is the one combination worth stopping for'],plan:PLANS.backoff};
   if(S.tempDev>0.5){k='rest';why.push('Wrist temp +'+S.tempDev.toFixed(2)+'\u00B0C over your own baseline');}
   else if(S.hrv<25){k='rest';why.push('HRV '+Math.round(S.hrv)+' ms — below your floor');}
   else if(S.consec>=2){k='rest';why.push(S.consec+' training days back to back');}
@@ -1378,6 +1449,7 @@ function renderToday(){
     '</div>';
 
 
+  renderFeel();
   renderNotices();
   const w=el('t-work');
   w.innerHTML='<div id="blk-a"></div><div id="blk-b"></div>';
@@ -1958,18 +2030,21 @@ function renderAerobic(slot){
   const locked=false;
   const noIntervals=S.verdict.k==='deload'||S.verdict.k==='ease'||S.verdict.k==='stale';
   if(noIntervals&&AERO_MODES[aeroMode].kind==='interval')aeroMode='stepup';
+  if(feelHas('feet')&&['jog','jogwalk','rope'].indexOf(aeroMode)>=0)aeroMode='stepup';
   const M=AERO_MODES[aeroMode];
   const isInterval=M.kind==='interval';
   const rope=ropeProtocol();
   const mins=aeroMinutes();
   const z=zoneFor(aeroMode);
 
+  const sore=feelHas('feet');
   const btns=Object.entries(AERO_MODES).map(([k,m])=>{
     const gated=m.gated&&locked;
+    const impact=sore&&(m.kind==='jog'||m.kind==='jogwalk'||m.kind==='interval');
     const jogUsed=(m.kind==='jog'||m.kind==='jogwalk')&&jogThisWeek()>=Math.max(1,AERO_TARGET-1);
-    const dis=gated||(noIntervals&&m.kind==='interval')||jogUsed;
+    const dis=gated||(noIntervals&&m.kind==='interval')||jogUsed||impact;
     return '<button class="'+(k===aeroMode?'on':'')+'"'+(dis?' disabled':'')+
-      ' onclick="'+(dis?(jogUsed?'toast(\'Jog quota used this week\')':'toast(\'No intervals on an easy week\')'):'setAero(\''+k+'\')')+
+      ' onclick="'+(dis?(impact?'toast(\'Sore feet \u2014 no impact work today\')':jogUsed?'toast(\'Jog quota used this week\')':'toast(\'No intervals on an easy week\')'):'setAero(\''+k+'\')')+
       '">'+m.name+(gated?' \u{1F512}':'')+'</button>';
   }).join('');
 
@@ -2972,7 +3047,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v9.5 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v9.6 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -3036,7 +3111,7 @@ function openDiag(){
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v9.5')+
+      diagRow('App version','v9.6')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
@@ -3136,10 +3211,21 @@ function bumpCore(d){DB.set('core_level_manual',Math.min(5,Math.max(1,S.core+d))
 function bumpRest(d){const st=DB.get('settings')||{restSec:90};st.restSec=Math.min(300,Math.max(30,(st.restSec||90)+d));DB.set('settings',st);openSettings();}
 
 function pasteImport(){
-  if(!navigator.clipboard||!navigator.clipboard.readText)return manualImport();
+  if(!navigator.clipboard||!navigator.clipboard.readText)return clipboardHelp();
   navigator.clipboard.readText()
-    .then(t=>{if(!t||t.length<20)return toast('Clipboard looks empty');ingest(t);})
-    .catch(()=>manualImport());
+    .then(t=>{if(!t||t.length<20)return clipboardHelp();ingest(t);})
+    .catch(()=>clipboardHelp());
+}
+function clipboardHelp(){
+  openSheet('<div style="padding:0 16px"><div class="sec" style="margin:8px 0 10px">Nothing readable on the clipboard</div>'+
+    '<div class="card" style="margin:0 0 10px"><div class="muted" style="line-height:1.7">'+
+    'Two things land here. If you copied a <b style="font-weight:400;color:var(--t2)">file</b> \u2014 which is what the app\u2019s Manual Export gives you \u2014 '+
+    'the clipboard holds a file, not text, and this button cannot read it. Use <b style="font-weight:400;color:var(--t2)">Choose JSON file</b> instead.'+
+    '<br><br>If you copied <b style="font-weight:400;color:var(--t2)">text</b> from a Shortcut and still see this, iOS may have blocked the read. Try the box below.'+
+    '</div></div>'+
+    '<label class="btn btn-go" style="width:100%;margin:0 0 8px;display:block;text-align:center">Choose JSON file instead'+
+      '<input type="file" accept=".json,application/json" style="display:none" onchange="fileImport(this)"></label>'+
+    '<button class="btn" style="width:100%;margin:0 0 20px" onclick="manualImport()">Paste into a box</button></div>');
 }
 function fileImport(input){
   const f=input.files&&input.files[0];if(!f)return;
@@ -3345,8 +3431,19 @@ function monthlySummary(){
   const wellDays=[];   // only present for days logged before v6.4
   for(let i=0;i<30;i++){const k=addDays(TODAY,-i);const w=DB.get('wellness_'+k);if(w)wellDays.push(w);}
 
+  /* The chips and the note are the only subjective record there is.
+     Without them in here, the weekly analysis is numbers with no voice. */
+  const feel=[];
+  for(let i=0;i<30;i++){
+    const k=addDays(TODAY,-i), f=DB.get('feel_'+k);
+    if(f&&((f.chips&&f.chips.length)||(f.note&&f.note.trim())))
+      feel.push({date:k,flags:f.chips||[],note:(f.note||'').trim()||undefined});
+  }
+  feel.reverse();
+
   return {
     period:from+' to '+TODAY,
+    how_you_felt:feel.length?feel:'nothing logged',
     hrv:{mean:+mean(hrv).toFixed(1),min:hrv.length?Math.min(...hrv):null,max:hrv.length?Math.max(...hrv):null,
       readings:hrv.length,first7:+mean(hrv.slice(0,7)).toFixed(1),last7:+mean(hrv.slice(-7)).toFixed(1)},
     restingHr:{mean:+mean(rhr).toFixed(1),first7:+mean(rhr.slice(0,7)).toFixed(1),last7:+mean(rhr.slice(-7)).toFixed(1)},
