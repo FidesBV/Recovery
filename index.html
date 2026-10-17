@@ -577,6 +577,71 @@ function stressFlag(){
     : 'HRV under your band of '+B[0].toFixed(0)+'\u2013'+B[1].toFixed(0)+' for '+S.belowStreak+' mornings running';
   return {peak:r.peak,nights:r.daysHigh,of:r.n,band:r.band,hrvNote};
 }
+/* ═══ ONE CALL A DAY ═══
+   Three subsystems used to issue orders independently: the verdict set an
+   intensity dial, the notices warned, and the strength and aerobic cards
+   each pushed their own urgency. On 17 Oct they said, on one screen, ease
+   off / you must lift / you are overloaded / fit three blocks into two
+   days. All four were defensible and together they were useless.
+
+   One action a day. The verdict decides how hard; this decides what. And
+   it names what is deliberately NOT happening, because that is half the
+   instruction. */
+function dayPlan(){
+  const v=S.verdict, k=v.k;
+  const gap=(function(){const l=realSessions().map(x=>x.date).sort().pop();
+    return l?daysBetween(l,TODAY):999;})();
+  const aerLeft=AERO_TARGET-aeroThisWeek().length;
+  const cap=v.plan.cap;
+  const off=[];
+
+  // 1. A day the body has vetoed. Nothing is negotiable here.
+  if(k==='rest'&&!v.soft)
+    return {do:'rest',title:'Rest today',sub:'Walking only, easy',
+      why:v.why,off:['No strength session','No aerobic block'],cap:cap};
+  if(k==='backoff')
+    return {do:'rest',title:'Back off today',sub:'Walking only, easy',
+      why:v.why,off:['No strength session','No aerobic block until both signals settle'],cap:cap};
+  if(k==='stale')
+    return {do:'easy',title:'Import your health data',sub:'The app cannot call the day on an old reading',
+      why:v.why,off:['No intervals while flying blind'],cap:cap};
+
+  // 2. Breathing up means intensity out — cardio, not a moderate lift.
+  const noIntensity=(k==='ease'||k==='deload')||(S.resp&&S.resp.daysHigh>=2);
+  // 3. Strength decays on a clock; aerobic does not. The longer gap wins.
+  const wantStrength=gap>=7&&k!=='rest';
+  const wantAero=aerLeft>0&&!aeroYesterday()&&!noIntensity;
+
+  if(wantStrength){
+    const soft=noIntensity||k==='deload';
+    off.push((S.resp&&S.resp.daysHigh>=2)?'No aerobic block — night breathing is up, so intensity comes out first'
+      :noIntensity?'No aerobic block — keep the intensity down today'
+      :aerLeft<=0?'Aerobic blocks already done this week':'Aerobic block tomorrow, not today');
+    if(noIntensity)off.push('No intervals, nothing above '+cap);
+    return {do:'strength',
+      title:gap>=14?'Lift today':'Strength today',
+      sub:soft?'Two sets per exercise instead of three, same weights':'Session as planned',
+      why:[gap>=14?gap+' days since your last lift — the biggest gap you have':
+            gap+' days since your last lift'].concat(
+           S.hrvBand&&S.hrv>=S.hrvBand[0]?['HRV '+Math.round(S.hrv)+' ms is inside your band, so lifting is fine']:[],
+           (S.resp&&S.resp.daysHigh>=2)?['Night breathing '+S.resp.peak.toFixed(1)+'/min on '+S.resp.daysHigh+
+             ' of '+S.resp.n+' nights — that is a signal about intensity, not about weights']
+           :(k==='ease'||k==='deload')?['Your own numbers say hold the intensity down today']:[]),
+      off:off,cap:cap};
+  }
+  if(k==='rest'&&v.soft)
+    return {do:'rest',title:'Day between sessions',sub:'Walking, and a moderate block if you want one',
+      why:v.why,off:['No strength session','No intervals'],cap:cap};
+  if(wantAero)
+    return {do:'aerobic',title:'Aerobic block today',sub:(k==='room'?'Intervals — spend it here':'Moderate, '+ZONE.moderate[0]+'–'+ZONE.moderate[1]+' bpm'),
+      why:v.why.concat([aerLeft+' block'+(aerLeft===1?'':'s')+' still open this week']),
+      off:['No strength session today'],cap:cap};
+  if(noIntensity)
+    return {do:'easy',title:'Easy day',sub:'Walking only',
+      why:v.why,off:['No intervals, nothing above '+cap],cap:cap};
+  return {do:'strength',title:'Strength today',sub:v.plan.strength,
+    why:v.why,off:aerLeft<=0?['Aerobic blocks done this week']:[],cap:cap};
+}
 function derive(){
   clearLoadCache();
   const hrvS=metricSeries('heart_rate_variability',60);
@@ -614,6 +679,7 @@ function derive(){
   S.loadRatio=loadRatio();
   S.stress=stressFlag();
   S.verdict=decideDay();
+  S.plan=dayPlan();
   S.score=S.rec?{total:S.rec.total,parts:S.rec.parts}:calcScore();
 }
 
@@ -1106,6 +1172,7 @@ function aeroThisWeek(){const ws=weekStart();
    a day between them; a fixed weekday was my invention, not evidence. */
 function daysLeftInWeek(){return 7-((new Date(TODAY).getDay()+6)%7);}
 function aeroOpen(){
+  if(S.plan&&S.plan.do!=='aerobic'&&S.plan.do!=='rest')return false;
   if(aeroThisWeek().length>=AERO_TARGET)return false;
   if(S.verdict&&S.verdict.k==='backoff')return false;
   if(S.verdict&&S.verdict.k==='rest'&&!S.verdict.soft)return false;
@@ -1125,8 +1192,9 @@ function aeroWeekList(){
     '</div>';
 }
 function aeroUrgent(){
-  const todo=AERO_TARGET-aeroThisWeek().length;
-  return todo>0&&daysLeftInWeek()<=todo+1;
+  // Chasing a weekly quota in the last two days is exactly how three hard
+  // efforts landed in one week. A missed block is missed; it never nags.
+  return false;
 }
 function isAeroDay(){return aeroOpen();}
 function aeroYesterday(){return aeroLog().some(e=>e.date===addDays(TODAY,-1));}
@@ -1289,21 +1357,26 @@ function renderToday(){
   setTimeout(()=>sparkline('spark-hrv',S.hrvV.slice(-30),'#7DA6F0'),0);
 
   // verdict
-  const V=STATES[S.verdict.soft?'softrest':S.verdict.k]||STATES.normal,pl=S.verdict.plan;
+  const V=STATES[S.verdict.soft?'softrest':S.verdict.k]||STATES.normal;
+  const P=S.plan;
+  const ICON={strength:'\u25C6',aerobic:'\u25B2',rest:'\u25CF',easy:'\u25CB'}[P.do]||'\u25C6';
   el('t-verdict').innerHTML=
     '<div class="verdict" style="background:'+V.bg+';border-color:'+V.bd+'">'+
-      '<div class="v-head"><div class="v-title" style="color:'+V.col+'">'+V.label+'</div>'+
-      '<div class="v-meta">HRV '+(S.hrv?Math.round(S.hrv):'—')+' · 7d '+(S.hrv7?Math.round(S.hrv7):'—')+
+      '<div class="v-head"><div class="v-title" style="color:'+V.col+'">'+ICON+' '+h(P.title)+'</div>'+
+      '<div class="v-meta">HRV '+(S.hrv?Math.round(S.hrv):'\u2014')+' \u00B7 7d '+(S.hrv7?Math.round(S.hrv7):'\u2014')+
         (S.hrvBand?'<div style="margin-top:2px;font-size:9px">'+(S.hrv>S.hrvBand[1]?'above band':S.hrv<S.hrvBand[0]?'below band':'in band')+'</div>':'')+
       '</div></div>'+
-      '<div class="v-why">'+h(S.verdict.why.join(' · '))+
-        (S.deload&&S.verdict.k!=='deload'&&S.verdict.k!=='rest'?' · deload week: one set less':'')+'</div>'+
-      '<div class="v-plan">'+
-        row('Strength',pl.strength+(S.deload&&S.verdict.k!=='rest'&&S.verdict.k!=='deload'?', one set less':''))+
-        row('Aerobic',pl.aerobic)+
-        row('Walking',pl.walk+' · '+pl.steps+' steps')+
-        row('HR ceiling',pl.cap)+
-      '</div></div>';
+      '<div style="font-size:14px;color:var(--t1);margin:2px 0 10px">'+h(P.sub)+'</div>'+
+      '<div class="v-plan" style="border-top:1px solid var(--line);padding-top:10px">'+
+        P.why.slice(0,3).map(w=>'<div style="display:block;padding:2px 0;color:var(--t2)">\u00B7 '+h(w)+'</div>').join('')+
+      '</div>'+
+      (P.off.length?'<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line)">'+
+        P.off.map(x=>'<div class="muted" style="padding:2px 0;color:var(--t3)">\u2715 '+h(x)+'</div>').join('')+
+      '</div>':'')+
+      '<div class="muted" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);display:flex;justify-content:space-between">'+
+        '<span>Walking '+h(S.verdict.plan.walk)+'</span><span>Ceiling '+h(P.cap)+'</span></div>'+
+    '</div>';
+
 
   renderNotices();
   const w=el('t-work');
@@ -1433,7 +1506,7 @@ function signalList(){
     out.push({sev:2,title:'Out of balance',short:gap+', '+b.aer+' aerobic blocks',
       text:gap+', against '+b.aer+' aerobic block'+(b.aer===1?'':'s')+' in that time. '+
         'One hard session a week holds strength for months \u2014 the gap is the problem, not the cardio.',maint:true});
-  else if(b.str<=1&&b.aer>=4)
+  else if(b.since!==null&&b.since>=7&&b.str<=1&&b.aer>=4)
     out.push({sev:1,title:'Leaning on cardio',short:b.aer+' aerobic vs '+b.str+' strength in 14 days',
       text:b.aer+' aerobic blocks against '+b.str+' strength session in '+b.days+' days'+
         (gap?' \u2014 '+gap:'')+'. Even one more lift a week evens it out.',maint:maintenanceMode()});
@@ -1458,7 +1531,13 @@ function signalList(){
   return out.sort((a,b)=>b.sev-a.sev);
 }
 function renderNotices(){
-  const sig=signalList();
+  const P=S.plan||{do:''};
+  const sig=signalList().filter(x=>{
+    if(P.do==='strength'&&/slipping|balance|cardio|Maintenance/i.test(x.title))return false;
+    if(/Load piling up/i.test(x.title)&&(P.do==='rest'||P.do==='easy'||/No aerobic/.test((P.off||[]).join(' '))))return false;
+    if(/Legs moved/i.test(x.title))return false;
+    return true;
+  });
   if(!sig.length){el('t-notices').innerHTML='';return;}
   const top=sig[0], rest=sig.slice(1,3);
   const C=top.sev>=2?['rgba(248,113,113,.28)','var(--rd)','var(--red)']
@@ -1530,8 +1609,12 @@ function renderSession(slot){
   if(slot)SESS_SLOT=slot;
   const wrap=el(SESS_SLOT);
   if(!wrap)return;
+  // Only call it the session when the plan actually asked for one. On a
+  // day the app cannot call, it is an option, not an instruction.
+  const P=S.plan||{do:'strength'};
   const lead='<div class="sec" style="margin-top:'+(SESS_SLOT==='blk-a'?'6px':'22px')+'">'+
-    (S.verdict.k==='rest'?"Today's session":'Strength session')+'</div>';
+    (S.verdict.k==='rest'?"Today's session"
+      :P.do==='strength'?'Strength session':'If you do train today')+'</div>';
   if(doneToday()){
     const s=sessions().filter(x=>x.date===TODAY).pop();
     wrap.innerHTML=lead+'<div class="card" style="border-color:rgba(74,222,128,.25);background:var(--gd)">'+
@@ -1840,15 +1923,13 @@ function renderAerobic(slot){
   const done=aeroLog().some(e=>e.date===TODAY);
 
   if(!isAeroDay()&&!done){
+    const P=S.plan||{};
+    const reason=(P.off||[]).filter(x=>/aerobic/i.test(x))[0]
+      ||(aeroYesterday()?'You did one yesterday \u2014 a day between blocks'
+        :count>=AERO_TARGET?'Both blocks done this week':'Not today');
     wrap.innerHTML=lead+'<div class="card"><div class="row">'+
-      '<div><div style="font-size:12px">Next block \u00B7 '+nextAeroDay()+'</div>'+
-      '<div class="muted" style="margin-top:3px">'+
-        (aeroYesterday()?'You did one yesterday \u00B7 a day between blocks':
-         count>=AERO_TARGET?'Both blocks done this week':'Rest day \u2014 pick it up tomorrow')+
-        ' \u00B7 '+daysLeftInWeek()+' day'+(daysLeftInWeek()===1?'':'s')+' left this week</div></div>'+
+      '<div style="flex:1"><div class="muted" style="color:var(--t3)">\u2715 '+h(reason)+'</div></div>'+
       '<div class="muted" style="color:'+(count>=AERO_TARGET?'var(--green)':'var(--t3)')+'">'+count+' / '+AERO_TARGET+'</div></div>'+
-      '<div class="muted" style="margin-top:11px;padding-top:10px;border-top:1px solid var(--line);line-height:1.6">'+
-      'Two a week on any day that suits you \u2014 frequency is not the lever, time in the right zone is. Walking stays your base and does not count here.</div>'+
       aeroWeekList()+'</div>';
     return;
   }
@@ -2887,7 +2968,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v9.1 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v9.2 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -2922,7 +3003,7 @@ function openDiag(){
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v9.1')+
+      diagRow('App version','v9.2')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
