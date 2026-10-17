@@ -495,12 +495,48 @@ function belowBandStreak(src,band){
 
 /* Days in a row with real activity \u2014 not just logged strength sessions.
    A week of 60-90 active minutes is load, whatever you call it. */
+/* ═══ DAILY LOAD ═══
+   His phone's import carries fourteen metric types, not the twenty-eight
+   in the raw export — apple_exercise_time is not among them. Everything
+   built on that one metric sat silent on his device: two fatigue signals
+   and the whole week strip. Steps are always there, so fall back to them
+   and say on screen which one is in use rather than showing nothing. */
+/* Steps, exercise minutes and active energy are running totals: the day
+   they are imported on is frozen mid-flight. His store holds 8 steps for
+   15 Oct because that is where the counter stood when he exported, and
+   every threshold below read it as a day off. Treat the import day as
+   incomplete until a later import replaces it. */
+function partialDay(){
+  const up=DB.get('health_uploaded');
+  if(!up)return null;
+  const m=DB.get('health_metrics')||{};
+  const newest=Object.keys(m).map(k=>{const a=m[k];
+    return a&&a.length?String(a[a.length-1].date||'').slice(0,10):'';}).sort().pop()||'';
+  return newest&&newest<=up?newest:null;
+}
+let _ld=null;
+function clearLoadCache(){_ld=null;}
+function loadSource(){
+  if(_ld&&_ld.day===TODAY)return _ld;
+  const ex=metricSeries('apple_exercise_time',70);
+  const part=partialDay();
+  const drop=a=>a.filter(e=>e[0]!==part);
+  if(ex.length>=7){_ld={day:TODAY,ser:drop(ex),by:Object.fromEntries(ex),
+    label:'active minutes',hard:40,part};return _ld;}
+  const st=metricSeries('step_count',70);
+  if(st.length>=7){_ld={day:TODAY,ser:drop(st),by:Object.fromEntries(st),
+    label:'steps',hard:5000,part};return _ld;}
+  _ld={day:TODAY,ser:[],by:{},label:'',hard:0,part};return _ld;
+}
 function activeDays(){
-  const ex=Object.fromEntries(metricSeries('apple_exercise_time',30));
-  let n=0,d=TODAY;
-  if(!(ex[d]>=40))d=addDays(d,-1);
+  const L=loadSource();
+  if(!L.hard)return 0;
+  let d=TODAY;
+  // data can lag a day or three; start at the newest complete reading
+  for(let i=0;i<4&&(L.by[d]===undefined||d===L.part);i++)d=addDays(d,-1);
+  let n=0;
   for(let i=0;i<21;i++){
-    if(ex[d]>=40){n++;d=addDays(d,-1);}else break;
+    if(L.by[d]>=L.hard){n++;d=addDays(d,-1);}else break;
   }
   return n;
 }
@@ -518,8 +554,9 @@ function respState(){
 }
 /* This week's active minutes against your own four-week average. */
 function loadRatio(){
-  const ex=metricSeries('apple_exercise_time',35);
-  const wk=mean(winVals(ex,TODAY,7)), base=mean(winVals(ex,TODAY,28));
+  const L=loadSource();
+  if(!L.ser.length)return null;
+  const wk=mean(winVals(L.ser,TODAY,7)), base=mean(winVals(L.ser,TODAY,28));
   if(!wk||!base)return null;
   return +(wk/base).toFixed(2);
 }
@@ -541,6 +578,7 @@ function stressFlag(){
   return {peak:r.peak,nights:r.daysHigh,of:r.n,band:r.band,hrvNote};
 }
 function derive(){
+  clearLoadCache();
   const hrvS=metricSeries('heart_rate_variability',60);
   const hrvV=hrvS.map(e=>e[1]);
   const todayHrv=hrvS.filter(e=>e[0]===TODAY).map(e=>e[1])[0];
@@ -1283,7 +1321,7 @@ function renderToday(){
 const WD=['M','T','W','T','F','S','S'];
 function shortDate(iso8){const d=new Date(iso8);return d.getDate()+' '+MON[d.getMonth()];}
 function weekDays(){
-  const ws=weekStart(), ex=Object.fromEntries(metricSeries('apple_exercise_time',40));
+  const ws=weekStart(), ex=loadSource().by;
   const str={},aer={};
   sessions().forEach(x=>{if(!x.skipped&&['push','pull','legs'].includes(x.type))str[x.date]=x.type;});
   aeroLog().forEach(a=>{aer[a.date]=a;});
@@ -1291,19 +1329,21 @@ function weekDays(){
   for(let i=0;i<7;i++){
     const d=addDays(ws,i);
     out.push({date:d,i,min:ex[d]||0,str:str[d]||null,aer:aer[d]||null,
+      partial:d===loadSource().part,
       future:d>TODAY,today:d===TODAY});
   }
   return out;
 }
 function renderWeek(){
   const days=weekDays();
-  const peak=Math.max(60,...days.map(d=>d.min));
+  const L=loadSource();
+  const peak=Math.max(L.hard||60,...days.filter(d=>!d.partial).map(d=>d.min));
   const nStr=days.filter(d=>d.str).length, nAer=days.filter(d=>d.aer).length;
   const left=daysLeftInWeek();
   const cells=days.map(d=>{
-    const pct=d.min?Math.max(8,Math.round(d.min/peak*100)):0;
+    const pct=d.partial?100:(d.min?Math.max(8,Math.round(d.min/peak*100)):0);
     const col=d.str?'var(--green)':d.aer?'var(--blue)':'var(--t3)';
-    const op=d.str||d.aer?'.8':'.5';
+    const op=d.partial?'.12':(d.str||d.aer?'.8':'.5');
     return '<div class="'+(d.today?'now':d.future?'fut':'')+'">'+
       '<u>'+WD[d.i]+'</u><b>'+(+d.date.slice(8))+'</b>'+
       '<div class="trk">'+(pct?'<div class="fil" style="height:'+pct+'%;background:'+col+';opacity:'+op+'"></div>':'')+'</div>'+
@@ -1315,8 +1355,11 @@ function renderWeek(){
   el('t-week').innerHTML='<div class="wk">'+cells+'</div>'+
     '<div class="wk-sum"><span class="muted">'+
       '<span style="color:'+strCol+'">'+nStr+' strength</span> · '+
-      '<span style="color:'+aerCol+'">'+nAer+'/'+tgt+' aerobic</span></span>'+
-    '<span class="muted">'+(left===0?'last day of the week':left+' day'+(left===1?'':'s')+' left')+'</span></div>';
+      '<span style="color:'+aerCol+'">'+nAer+'/'+tgt+' aerobic</span>'+
+      (L.label?' · bars are '+L.label:'')+'</span>'+
+      (L.ser.length&&L.ser[L.ser.length-1][0]<TODAY
+        ?'<span class="muted" style="color:var(--yellow)">data to '+shortDate(L.ser[L.ser.length-1][0])+'</span>':
+    '<span class="muted">'+(left===0?'last day of the week':left+' day'+(left===1?'':'s')+' left')+'</span>')+'</div>';
 }
 
 /* One morning is noisy; show how far it sits from the trend. */
@@ -1382,7 +1425,11 @@ function signalList(){
   const out=[];
   const b=balanceState();
   const gap=b.since===null?'':b.since+' days since your last lift';
-  if(b.since!==null&&b.since>=10&&b.aer>=2)
+  if(b.since!==null&&b.since>=14)
+    out.push({sev:2,title:'Strength is slipping',short:gap,
+      text:gap+'. Strength holds for months on one hard session a week, but not on none \u2014 '+
+        'this is now the single thing costing you most.'+(b.aer?' '+b.aer+' aerobic block'+(b.aer===1?'':'s')+' in that time.':''),maint:true});
+  else if(b.since!==null&&b.since>=10&&b.aer>=2)
     out.push({sev:2,title:'Out of balance',short:gap+', '+b.aer+' aerobic blocks',
       text:gap+', against '+b.aer+' aerobic block'+(b.aer===1?'':'s')+' in that time. '+
         'One hard session a week holds strength for months \u2014 the gap is the problem, not the cardio.',maint:true});
@@ -2840,7 +2887,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v9.0 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v9.1 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -2848,6 +2895,14 @@ let LASTERR=null;
 window.addEventListener('error',e=>{LASTERR=(e.message||'error')+' @'+(e.lineno||'?');});
 window.addEventListener('unhandledrejection',e=>{LASTERR='promise: '+(e.reason&&e.reason.message||e.reason);});
 
+/* The import is only as good as what the export carries. His phone sends
+   fourteen metric types, not twenty-eight, and the gap was invisible. */
+const WANT=['heart_rate_variability','resting_heart_rate','respiratory_rate','sleep_analysis',
+  'step_count','vo2_max','apple_exercise_time','apple_sleeping_wrist_temperature'];
+function missingMetrics(){
+  const m=DB.get('health_metrics')||{};
+  return WANT.filter(k=>!m[k]||!m[k].length);
+}
 function storageUsed(){
   let n=0;try{Object.keys(localStorage).filter(k=>k.startsWith(P)).forEach(k=>n+=localStorage.getItem(k).length);}catch(e){}
   return (n/1024).toFixed(0)+' KB';
@@ -2867,7 +2922,7 @@ function openDiag(){
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v9.0')+
+      diagRow('App version','v9.1')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
@@ -2889,6 +2944,8 @@ function openDiag(){
       diagRow('Health metrics',names.length+' types, newest '+newest,names.length>0)+
       diagRow('HRV reading',S.hrvDate?S.hrvDate+' ('+(S.hrvAge===0?'today':S.hrvAge+'d old')+')':'none',S.hrvAge<=1)+
       diagRow('Workouts stored',(DB.get('health_workouts')||[]).length)+
+      diagRow('Load source',loadSource().label||'none \u2014 no activity metric',!!loadSource().label)+
+      diagRow('Missing metrics',missingMetrics().length?missingMetrics().join(', '):'none',!missingMetrics().length)+
       diagRow('Aerobic blocks found',Object.keys(autoAero()).length+' auto \u00B7 '+manualAeroLog().length+' logged')+
       diagRow('Sessions logged',sessions().length)+
       diagRow('Aerobic blocks',aeroLog().length)+
@@ -2994,8 +3051,10 @@ function ingest(text){
     DB.set('health_metrics',out);DB.set('health_uploaded',TODAY);
     const nw=ingestWorkouts(d.workouts||[]);
     const n=Object.keys(out).length;
+    const miss=missingMetrics();
     closeSheet();renderAll();
-    toast('Imported '+n+' metrics'+(nw?' \u00B7 '+nw+' aerobic sessions found':''));
+    toast(miss.length?'Imported '+n+' metrics \u00B7 missing '+miss.length+', see Diagnostics'
+      :'Imported '+n+' metrics'+(nw?' \u00B7 '+nw+' aerobic sessions found':''));
   }catch(e){toast('That is not valid JSON');}
 }
 /* Your watch already knows what you did. Keeping a separate manual log
