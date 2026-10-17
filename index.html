@@ -2956,6 +2956,7 @@ function openSettings(){
         '<input type="file" accept=".json,application/json" style="display:none" onchange="fileImport(this)"></label>'+
       '<button class="btn btn-quiet" style="width:100%;margin:0" onclick="manualImport()">Paste into a box instead</button>'+
       '<div class="muted" style="margin-top:10px">'+(DB.get('health_uploaded')?'Last import '+DB.get('health_uploaded'):'No import yet')+'</div>'+
+      missingNote()+
       '<div class="muted" style="margin-top:10px;line-height:1.6">For a daily HRV you can act on: one minute of the Mindfulness breathing session each morning before you get up. The watch\u2019s automatic readings are sporadic and noisy.</div>'+
     '</div>'+
     '<div class="card" style="margin:0 0 10px">'+
@@ -2968,7 +2969,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v9.2 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v9.3 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -2983,6 +2984,29 @@ const WANT=['heart_rate_variability','resting_heart_rate','respiratory_rate','sl
 function missingMetrics(){
   const m=DB.get('health_metrics')||{};
   return WANT.filter(k=>!m[k]||!m[k].length);
+}
+const METRIC_NAME={heart_rate_variability:'Heart Rate Variability',resting_heart_rate:'Resting Heart Rate',
+  respiratory_rate:'Respiratory Rate',sleep_analysis:'Sleep Analysis',step_count:'Step Count',
+  vo2_max:'VO2 Max',apple_exercise_time:'Exercise Time',
+  apple_sleeping_wrist_temperature:'Sleeping Wrist Temperature',
+  blood_oxygen_saturation:'Blood Oxygen Saturation',breathing_disturbances:'Breathing Disturbances'};
+const METRIC_WHY={apple_exercise_time:'the week bars, your active-day streak and the weekly load check',
+  blood_oxygen_saturation:'the illness check',breathing_disturbances:'sleep quality'};
+/* A missing metric used to fail silently: signals built on it simply never
+   fired. Say which switch to flip, in the app's own words. */
+function missingNote(){
+  const miss=missingMetrics();
+  const nice=['blood_oxygen_saturation','breathing_disturbances'].filter(k=>{
+    const m=DB.get('health_metrics')||{};return !m[k]||!m[k].length;});
+  if(!miss.length&&!nice.length)return '';
+  const line=k=>'<div style="padding:2px 0">\u2022 '+h(METRIC_NAME[k]||k)+
+    (METRIC_WHY[k]?' <span style="color:var(--t3)">\u2014 '+METRIC_WHY[k]+'</span>':'')+'</div>';
+  return '<div class="muted" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);line-height:1.6">'+
+    (miss.length?'<span style="color:var(--yellow)">Not arriving in your export</span>'+
+      miss.map(line).join(''):'')+
+    (nice.length?'<div style="margin-top:'+(miss.length?'7px':'0')+'"><span style="color:var(--t2)">Worth adding</span>'+
+      nice.map(line).join('')+'</div>':'')+
+    '<div style="margin-top:7px;color:var(--t3)">Turn these on in Health Auto Export before the next export, then import again.</div></div>';
 }
 function storageUsed(){
   let n=0;try{Object.keys(localStorage).filter(k=>k.startsWith(P)).forEach(k=>n+=localStorage.getItem(k).length);}catch(e){}
@@ -3003,7 +3027,7 @@ function openDiag(){
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v9.2')+
+      diagRow('App version','v9.3')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
