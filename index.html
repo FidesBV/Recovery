@@ -37,19 +37,12 @@ h1{font-family:'Instrument Serif',serif;font-size:30px;font-weight:400;line-heig
 .muted{color:var(--t3);font-size:10px;line-height:1.6;}
 .row{display:flex;justify-content:space-between;align-items:center;gap:12px;}
 
-/* hero */
-.hero{margin:14px 16px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:18px;padding:22px 18px;text-align:center;}
-.hero-val{font-family:'Instrument Serif',serif;font-size:64px;line-height:1;letter-spacing:-.03em;}
 .hero-unit{font-size:11px;color:var(--t3);margin-left:4px;}
-.hero-lbl{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3);margin-bottom:10px;}
-.hero-sub{font-size:11px;color:var(--t2);margin-top:8px;line-height:1.6;}
-.spark{width:100%;height:34px;display:block;margin-top:14px;}
-
-/* strip */
-.strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 10px;}
-.strip div{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:10px 6px;text-align:center;}
-.strip b{display:block;font-family:'Instrument Serif',serif;font-size:19px;font-weight:400;line-height:1.2;}
-.strip span{font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);}
+.lnk{background:none;border:none;color:var(--t3);font-size:11px;cursor:pointer;padding:7px 0;}
+.ready{font-family:'Instrument Serif',serif;font-size:42px;line-height:.95;letter-spacing:-.02em;}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:2px 20px 0;padding-top:6px;border-top:1px solid var(--line);}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 16px 12px;}
+.rrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);}
 
 /* verdict */
 .verdict{margin:0 16px 10px;border-radius:14px;padding:15px 16px;border:1px solid;}
@@ -204,26 +197,19 @@ nav b{display:block;font-size:15px;margin-bottom:3px;font-weight:400;}
 <body>
 
 <div class="screen on" id="s-today"><div class="wrap">
-  <div class="top"><div><div class="date" id="t-date">—</div><h1 id="t-hello">Today</h1></div>
-    <div style="text-align:right"><div class="date" id="t-phase">—</div><div class="muted" id="t-streak" style="margin-top:4px">—</div></div>
-  </div>
-  <div id="t-week"></div>
+  <div class="top"><div><div class="date" id="t-date">—</div><h1 id="t-hello">Today</h1></div></div>
+  <div style="height:10px"></div>
+  <div id="t-fresh"></div>
   <div id="t-verdict"></div>
-  <div id="t-feel"></div>
   <div id="t-notices"></div>
   <div id="t-work"></div>
-  <div class="sec">Signals</div>
-  <div id="t-signals"></div>
-  <div class="sec">Measurements</div>
-  <div id="t-log"></div>
+  <div id="t-week"></div>
+  <div id="t-foot"></div>
 </div></div>
 
 <div class="screen" id="s-prog"><div class="wrap">
   <div class="top"><div><div class="date">Progress</div><h1>Direction</h1></div></div>
-  <div class="tabs">
-    <button class="on" id="pt-health" onclick="setProgTab('health')">Health</button>
-    <button id="pt-body" onclick="setProgTab('body')">Body &amp; strength</button>
-  </div>
+  <div style="height:10px"></div>
   <div id="p-body"></div>
 </div></div>
 
@@ -287,51 +273,49 @@ function addDays(k,n){const d=new Date(k);d.setDate(d.getDate()+n);return iso(d)
 function daysBetween(a,b){return Math.round((new Date(b)-new Date(a))/86400000);}
 
 /* ═══ 3. HEALTH DATA ═══ */
+let _hm=null,_part;
+function HM(){if(!_hm)_hm=DB.get('health_metrics')||{};return _hm;}
+function hmReset(){_hm=null;_part=undefined;}
+/* Counters that run all day. The row for a day still in progress is a
+   snapshot, not a result: resting HR read 72 at three in the afternoon
+   against a normal of 64, and the old score fell ten points on it. A day
+   counts once a later import has replaced it. */
+const RUNNING=['resting_heart_rate','step_count','apple_exercise_time','active_energy'];
 function metricSeries(name,days){
-  const m=DB.get('health_metrics');
-  if(!m||!m[name])return [];
+  const m=HM();
+  if(!m[name])return [];
   const cut=addDays(TODAY,-days);
+  const part=RUNNING.indexOf(name)>=0?partialDay():null;
   return m[name].map(r=>[(r.date||'').slice(0,10),r.qty||0])
     // never let a future-dated row leak in: last() and the bands all
     // assume the newest entry is the most recent night, not tomorrow's
-    .filter(e=>e[0]&&e[0]>=cut&&e[0]<=TODAY&&e[1]>0).sort((a,b)=>a[0].localeCompare(b[0]));
+    .filter(e=>e[0]&&e[0]>=cut&&e[0]<=TODAY&&e[1]>0&&e[0]!==part).sort((a,b)=>a[0].localeCompare(b[0]));
+}
+/* The day is judged on its first HRV reading. Apple's daily figure keeps
+   averaging in daytime samples, so an afternoon import would otherwise
+   move the morning's call after the fact. */
+function hrvSeries(days){
+  const s=metricSeries('heart_rate_variability',days);
+  const am=DB.get('am_'+TODAY);
+  if(am&&am.hrv){const i=s.findIndex(e=>e[0]===TODAY);if(i>=0)s[i]=[TODAY,am.hrv];}
+  return s;
 }
 function vals(name,days){return metricSeries(name,days).map(e=>e[1]);}
 function mean(a){const v=(a||[]).filter(x=>x>0);return v.length?v.reduce((s,x)=>s+x,0)/v.length:0;}
 function last(a){return a&&a.length?a[a.length-1]:0;}
 function median(a){const v=[...a].sort((x,y)=>x-y);return v.length?v[Math.floor(v.length/2)]:0;}
-function sleepRecords(){const m=DB.get('health_metrics');
+function sleepRecords(){const m=HM();
   return ((m&&m.sleep_analysis)||[]).filter(r=>String(r.date||'').slice(0,10)<=TODAY);}
 
 /* ═══ 4. TRAINING HISTORY ═══ */
 function sessions(){return (DB.get('session_log')||[]).filter(s=>s&&s.date);}
 function realSessions(){return sessions().filter(s=>!s.skipped&&['push','pull','legs'].includes(s.type));}
-function doneToday(){return sessions().some(s=>s.date===TODAY&&!s.skipped);}
 function consecutiveTraining(){
   const done=new Set(realSessions().map(s=>s.date));
   let n=0,k=addDays(TODAY,-1);
   for(let i=0;i<7;i++){if(done.has(k)){n++;k=addDays(k,-1);}else break;}
   return n;
 }
-/* Consistency, not consecutive days. Rest days are prescribed here,
-   so a day counter would reward exactly the wrong behaviour. */
-function weekMet(offset){
-  const start=addDays(weekStart(),-7*offset), end=addDays(start,6);
-  const str=sessions().filter(x=>x.date>=start&&x.date<=end&&!x.skipped&&['push','pull','legs'].includes(x.type)).length;
-  const aer=aeroLog().filter(a=>a.date>=start&&a.date<=end).length;
-  return {str,aer,ok:str>=2&&aer>=AERO_TARGET};
-}
-function weekStreak(){
-  let n=0;
-  // the current week only counts once it is actually complete
-  for(let i=1;i<60;i++){ if(weekMet(i).ok)n++; else break; }
-  return n;
-}
-function thisWeekProgress(){
-  const w=weekMet(0);
-  return w.str+' strength \u00B7 '+w.aer+'/'+AERO_TARGET+' aerobic \u00B7 '+daysLeftInWeek()+'d left';
-}
-
 /* ═══ 5. PHASE — ratchet, not a switch ═══ */
 function rawPhase(hrvV){const a=mean(hrvV.slice(-7));return !a?1:a>=42?3:a>=36?2:1;}
 function confirmPhase(hrvV){
@@ -365,10 +349,22 @@ function coreLevel(){
 }
 
 /* ═══ 7. DELOAD ═══ */
+/* A deload follows four trained weeks in a row, counted from the log.
+   It used to follow the calendar from the first session ever logged, and
+   in November it landed on the first week back after six weeks off. */
+function weekStartOf(k){const d=new Date(k);d.setDate(d.getDate()-((d.getDay()+6)%7));return iso(d);}
 function deloadWeek(){
-  let a=DB.get('deload_anchor');
-  if(!a){const f=sessions().map(s=>s.date).sort()[0];if(!f)return false;a=f;DB.set('deload_anchor',a);}
-  return (Math.floor(daysBetween(a,TODAY)/7)%5)+1===5;
+  const dates=realSessions().map(s=>s.date).sort();
+  if(!dates.length)return false;
+  const ws=weekStart();
+  let wk=weekStartOf(dates[0]),c=0;
+  for(let i=0;i<400&&wk<ws;i++){
+    const end=addDays(wk,6);
+    const n=dates.filter(d=>d>=wk&&d<=end).length;
+    if(!n)c=0; else if(c>=4)c=0; else c++;
+    wk=addDays(wk,7);
+  }
+  return c>=4;
 }
 
 /* ═══ 8. DERIVED STATE ═══ */
@@ -399,23 +395,27 @@ function sleepSeries(){
   return sleepRecords().map(r=>[(r.date||'').slice(0,10),r.totalSleep||0]).filter(e=>e[0]&&e[1]>0)
     .sort((a,b)=>a[0].localeCompare(b[0]));
 }
-/* Recovery for any date: HRV 50, resting HR 25, sleep 15, breathing 10.
-   Each part blends last night (60%) with the 7-day trend (40%), both
-   against your own 60-day normal. The trend alone barely ever leaves
-   the band, so on its own it cannot tell one morning from the next. */
 function dayVal(ser,d){
   const m=ser.filter(e=>e[0]<=d&&e[0]>=addDays(d,-1));
   return m.length?m[m.length-1][1]:0;
 }
-function blendZ(today,avg7,st,invert){
+function blendZ(today,avg7,st,invert,wt){
   if(!st)return null;
   const zt=today?zOf(today,st):null;
   // a 7-day mean varies about half as much as a single day, so scale it
   const za=avg7?((st.log?Math.log(avg7):avg7)-st.m)/(st.sd/2):null;
-  let z=zt!==null&&za!==null?0.6*zt+0.4*za:(zt!==null?zt:za);
+  const w=wt||0.6;
+  let z=zt!==null&&za!==null?w*zt+(1-w)*za:(zt!==null?zt:za);
   if(z===null)return null;
   return invert?-z:z;
 }
+/* One number for "how recovered am I today", built only from what the
+   night measured: HRV 50, night breathing 20, resting HR 15, sleep 15,
+   each against your own 60-day normal. Breathing, resting HR and sleep
+   lean on last night (60%) over the 7-day trend (40%). HRV leans the
+   other way: the watch takes a handful of samples a night, and his
+   morning figure has landed 12 to 18 ms away from the day's final value.
+   Resting HR is the last complete day, never a day still in progress. */
 function recoveryOn(d,src){
   const H=src.hrv,R=src.rhr,B=src.resp,Z=src.sleep;
   const hb=bandStats(winVals(H,d,60),true), rb=bandStats(winVals(R,d,60)),
@@ -425,9 +425,10 @@ function recoveryOn(d,src){
   let zs=blendZ(s1,s7,sb,false);
   if(s1&&s1<6)zs=Math.min(zs===null?-1:zs,-1.2);         // a short night is short, whatever your normal is
   const parts=[
-    ['HRV',normalScore(blendZ(h1,h7,hb,false)),55],
-    ['Resting HR',normalScore(blendZ(r1,r7,rb,true)),25],
-    ['Sleep',normalScore(zs),20]
+    ['HRV',normalScore(blendZ(h1,h7,hb,false,0.4)),50],
+    ['Night breathing',normalScore(blendZ(b1,b7,bb,true)),20],
+    ['Resting HR',normalScore(blendZ(r1,r7,rb,true)),15],
+    ['Sleep',normalScore(zs),15]
   ];
   const have=parts.filter(p=>p[1]!==null);
   if(!have.length||parts[0][1]===null)return null;
@@ -436,59 +437,36 @@ function recoveryOn(d,src){
   return {total,parts:parts.map(p=>[p[0],p[1]===null?null:p[1]*p[2],p[2]]),
     hrv7:h7,hrvBand:bandOf(hb),hrvStats:hb,rhr7:r7,rhrBand:bandOf(rb)};
 }
-/* Fitness, recomputed for any past date so months can be compared. */
-function fitnessOn(d){
-  const c=x=>Math.max(0,Math.min(1,x));
-  const pick=(name,days)=>metricSeries(name,400).filter(e=>e[0]<=d&&e[0]>=addDays(d,-days)).map(e=>e[1]);
-  const v=pick('vo2_max',90), cr=pick('cardio_recovery',14), rh=pick('resting_heart_rate',30);
-  const bp=(DB.get('bp_log')||[]).filter(x=>x.date<=d&&x.date>=addDays(d,-60)).pop();
-  const vo2=v.length?v[v.length-1]:0, crm=mean(cr), rhm=mean(rh);
-  const parts=[
-    ['VO2max',vo2?c((vo2-32)/12):null,40],
-    ['Cardio recovery',crm?c((crm-20)/20):null,25],
-    ['Resting HR, 30 days',rhm?c((72-rhm)/17):null,20],
-    ['Blood pressure',bp?(bp.sys<120&&bp.dia<80?1:bp.sys<130&&bp.dia<85?0.8:bp.sys<140&&bp.dia<90?0.5:0.2):null,15]
-  ];
-  const have=parts.filter(p=>p[1]!==null);
-  if(!have.length)return null;
-  const w=have.reduce((a,p)=>a+p[2],0);
-  return {total:Math.round(have.reduce((a,p)=>a+p[1]*p[2],0)/w*100),
-    parts:parts.map(p=>[p[0],p[1]===null?null:p[1]*p[2],p[2]]),
-    raw:{vo2,cr:crm,rhr30:rhm,bp}};
+/* The number and the day's call read the same signals. Every rule that
+   stops the day also holds the number down, and says which rule did it,
+   so a rest or back-off call can never sit next to a high number. A
+   single raised signal only moves its own part of the number. */
+/* His own rule for a run or any hard block: HRV under 31, or a night
+   under six hours, means walk instead. On 14 November the same pace cost
+   twenty beats more on a morning like that. */
+function lowMorning(){
+  if(S.hrvIsToday&&S.hrv&&S.hrv<31)return 'HRV '+Math.round(S.hrv)+' ms this morning \u2014 under 31, so a walk instead of a run';
+  if(S.totalSleep&&S.totalSleep<6)return S.totalSleep.toFixed(1)+' h of sleep \u2014 under six, so a walk instead of a run';
+  return '';
 }
-/* Month-end snapshots, so you can see whether it is actually moving. */
-function fitnessMonths(){
-  const out=[];
-  for(let i=5;i>=0;i--){
-    const ref=new Date(TODAY);ref.setMonth(ref.getMonth()-i+1);ref.setDate(0);
-    let d=iso(ref); if(d>TODAY)d=TODAY;
-    const f=fitnessOn(d);
-    if(f&&f.raw.vo2)out.push({month:d.slice(0,7),total:f.total,vo2:f.raw.vo2,cr:f.raw.cr,rhr:f.raw.rhr30});
-  }
-  return out;
-}
-/* Fitness moves in months, so it is judged against health norms. */
-function fitnessNow(){
-  const vo2=last(vals('vo2_max',90));
-  const cr=mean(vals('cardio_recovery',14));
-  const rhr30=mean(vals('resting_heart_rate',30));
-  const bp=(DB.get('bp_log')||[]).filter(x=>x.date>=addDays(TODAY,-60)).pop();
-  const c=x=>Math.max(0,Math.min(1,x));
-  const parts=[
-    ['VO2max',vo2?c((vo2-32)/12):null,40],
-    ['Cardio recovery',cr?c((cr-20)/20):null,25],
-    ['Resting HR, 30 days',rhr30?c((72-rhr30)/17):null,20],
-    ['Blood pressure',bp?(bp.sys<120&&bp.dia<80?1:bp.sys<130&&bp.dia<85?0.8:bp.sys<140&&bp.dia<90?0.5:0.2):null,15]
-  ];
-  const have=parts.filter(p=>p[1]!==null);
-  if(!have.length)return null;
-  const wsum=have.reduce((a,p)=>a+p[2],0);
-  return {total:Math.round(have.reduce((a,p)=>a+p[1]*p[2],0)/wsum*100),
-    parts:parts.map(p=>[p[0],p[1]===null?null:p[1]*p[2],p[2]]),
-    raw:{vo2,cr,rhr30,bp}};
+function readiness(){
+  const r=S.rec;
+  // no reading from this morning, no number: yesterday's is not today's
+  if(!r||!S.hrvIsToday)return null;
+  let total=r.total;const caps=[];
+  const cap=(n,why)=>{if(total>n){total=n;caps.push(why);}};
+  const objective=(S.tempDev>0.3)||(S.resp&&S.resp.daysHigh>=1)||(S.hrvBand&&S.hrv&&S.hrv<S.hrvBand[0]);
+  if(S.tempDev>0.5)cap(40,'wrist temperature +'+S.tempDev.toFixed(2)+'°C over your baseline');
+  if(S.hrv&&S.hrv<25)cap(40,'HRV under your floor of 25 ms');
+  if(feelHas('ill')&&objective)cap(45,'you feel something coming on and a number agrees');
+  if(S.stress)cap(50,'night breathing and HRV are both off');
+  if(S.hrv&&S.hrv<31)cap(69,'HRV under 31 this morning');
+  if(S.totalSleep&&S.totalSleep<6)cap(69,'under six hours of sleep');
+  if(S.tempDev>0.3&&S.tempDev<=0.5)cap(69,'wrist temperature slightly up');
+  return {total,raw:r.total,parts:r.parts,caps};
 }
 function recSources(days){
-  return {hrv:metricSeries('heart_rate_variability',days),rhr:metricSeries('resting_heart_rate',days),
+  return {hrv:hrvSeries(days),rhr:metricSeries('resting_heart_rate',days),
     resp:metricSeries('respiratory_rate',days),sleep:sleepSeries()};
 }
 /* How many mornings in a row today's reading sat below the band. */
@@ -515,12 +493,13 @@ function belowBandStreak(src,band){
    every threshold below read it as a day off. Treat the import day as
    incomplete until a later import replaces it. */
 function partialDay(){
+  if(_part!==undefined)return _part;
   const up=DB.get('health_uploaded');
-  if(!up)return null;
-  const m=DB.get('health_metrics')||{};
+  const m=HM();
   const newest=Object.keys(m).map(k=>{const a=m[k];
     return a&&a.length?String(a[a.length-1].date||'').slice(0,10):'';}).sort().pop()||'';
-  return newest&&newest<=up?newest:null;
+  _part=(up&&newest&&newest<=up)?newest:null;
+  return _part;
 }
 let _ld=null;
 function clearLoadCache(){_ld=null;}
@@ -623,12 +602,20 @@ function dayPlan(){
     return {do:'easy',title:'Import your health data',sub:'The app cannot call the day on an old reading',
       why:v.why,off:['No intervals while flying blind'],cap:cap};
 
+  // One action a day: once it is logged, the day is done.
+  const sDone=strengthDoneToday(), aDone=aeroLog().some(e=>e.date===TODAY);
+  if(sDone||aDone)
+    return {do:'done',title:'Done for today',
+      sub:(sDone&&aDone?'Strength and an aerobic block':sDone?'Strength session':'Aerobic block')+' logged · walking is all that is left',
+      why:v.why,off:[sDone&&aDone?'Nothing more today':sDone?'No aerobic block on top of a lift':'No strength session on top of a block'],cap:cap};
+
   // 2. Breathing up means intensity out — cardio, not a moderate lift.
   const noIntensity=(k==='ease'||k==='deload')||(S.resp&&S.resp.daysHigh>=2)||
     feelHas('ill')||feelHas('sleep')||feelHas('flat');
   // 3. Strength decays on a clock; aerobic does not. The longer gap wins.
   const wantStrength=gap>=7&&k!=='rest';
-  const wantAero=aerLeft>0&&!aeroYesterday()&&!noIntensity;
+  const lowAm=lowMorning();
+  const wantAero=aerLeft>0&&!aeroYesterday()&&!noIntensity&&!lowAm;
 
   if(wantStrength){
     const soft=noIntensity||k==='deload'||feelHas('legs');
@@ -641,7 +628,7 @@ function dayPlan(){
     return {do:'strength',
       title:gap>=14?'Lift today':'Strength today',
       sub:soft?'Two sets per exercise instead of three, same weights':'Session as planned',
-      why:[gap>=14?gap+' days since your last lift — the biggest gap you have':
+      why:[gap>=999?'No strength session logged yet':gap>=14?gap+' days since your last lift — the biggest gap you have':
             gap+' days since your last lift'].concat(
            feelWhy(),
            S.hrvBand&&S.hrv>=S.hrvBand[0]?['HRV '+Math.round(S.hrv)+' ms is inside your band, so lifting is fine']:[],
@@ -653,10 +640,17 @@ function dayPlan(){
   if(k==='rest'&&v.soft)
     return {do:'rest',title:'Day between sessions',sub:'Walking, and a moderate block if you want one',
       why:v.why,off:['No strength session','No intervals'],cap:cap};
-  if(wantAero)
-    return {do:'aerobic',title:'Aerobic block today',sub:(k==='room'?'Intervals — spend it here':'Moderate, '+ZONE.moderate[0]+'–'+ZONE.moderate[1]+' bpm'),
+  if(wantAero){
+    const jog=plannedAeroMode()==='jog';
+    return {do:'aerobic',title:jog?'Run today':'Aerobic block today',
+      sub:jog?jogMinutes()+' min easy · '+ZONE.moderate[0]+'–'+ZONE.moderate[1]+' bpm'
+             :'Moderate block · '+ZONE.moderate[0]+'–'+ZONE.moderate[1]+' bpm',
       why:v.why.concat([aerLeft+' block'+(aerLeft===1?'':'s')+' still open this week']),
       off:['No strength session today'],cap:cap};
+  }
+  if(lowAm&&aerLeft>0&&!aeroYesterday()&&!noIntensity)
+    return {do:'easy',title:'Walk today',sub:'A walk instead of the run',
+      why:[lowAm].concat(v.why),off:['No run or hard block on a low morning'],cap:cap};
   if(noIntensity)
     return {do:'easy',title:'Easy day',sub:'Walking only',
       why:v.why,off:['No intervals, nothing above '+cap],cap:cap};
@@ -689,75 +683,58 @@ function saveFeelNote(v){
   const f=feelOf(); f.note=String(v||'').slice(0,400);
   DB.set('feel_'+TODAY,f);
 }
-function renderFeel(){
+function feelHTML(){
   const f=feelOf();
-  el('t-feel').innerHTML='<div class="card" style="margin-bottom:10px">'+
-    '<div class="muted" style="margin-bottom:9px">How do you feel? Tap what applies \u2014 it changes today\u2019s call.</div>'+
+  return '<div class="card" style="margin-top:10px">'+
+    '<div class="muted" style="margin-bottom:9px">Tap what applies — it changes today’s call.</div>'+
     '<div class="chips">'+FEELS.map(x=>'<button class="'+(x.warn?'warn ':'')+
       (f.chips.indexOf(x.id)>=0?'on':'')+'" onclick="toggleFeel(\''+x.id+'\')">'+h(x.label)+'</button>').join('')+'</div>'+
-    '<textarea id="feel-note" rows="2" placeholder="Anything else, in your own words \u2014 goes into the weekly summary" '+
+    '<textarea id="feel-note" rows="2" placeholder="Anything else, in your own words — goes into the weekly summary" '+
       'onblur="saveFeelNote(this.value)">'+h(f.note||'')+'</textarea>'+
     '</div>';
 }
 function derive(){
-  clearLoadCache();
-  const hrvS=metricSeries('heart_rate_variability',60);
+  clearLoadCache();_part=undefined;
+  const rawToday=metricSeries('heart_rate_variability',2).filter(e=>e[0]===TODAY)[0];
+  if(rawToday&&!DB.get('am_'+TODAY))DB.set('am_'+TODAY,{hrv:rawToday[1],ts:Date.now()});
+  const hrvS=hrvSeries(60);
   const hrvV=hrvS.map(e=>e[1]);
   const todayHrv=hrvS.filter(e=>e[0]===TODAY).map(e=>e[1])[0];
   const lastHrvDate=hrvS.length?hrvS[hrvS.length-1][0]:null;
   const rhrV=vals('resting_heart_rate',60);
   const sl=sleepRecords();
   const slToday=sl.filter(r=>(r.date||'').slice(0,10)===TODAY)[0]||{};
-  const respV=vals('respiratory_rate',14);
   const vo2V=vals('vo2_max',90);
-  const tempV=vals('apple_sleeping_wrist_temperature',28);
+  const tempS=metricSeries('apple_sleeping_wrist_temperature',28);
+  const tempV=tempS.map(e=>e[1]);
+  // a wrist-temperature reading older than two nights says nothing about today
+  const tempFresh=tempS.length&&daysBetween(tempS[tempS.length-1][0],TODAY)<=2;
   S={
     hrv:todayHrv||last(hrvV), hrvIsToday:!!todayHrv, hrvV,
     hrvDate:lastHrvDate, hrvAge:lastHrvDate?daysBetween(lastHrvDate,TODAY):99,
     hrv7:mean(hrvV.slice(-7)), hrvPrev7:mean(hrvV.slice(-14,-7)),
     rhr:last(rhrV), rhrBase:mean(rhrV.slice(-14,-1)), rhrV,
     deep:slToday.deep||0, totalSleep:slToday.totalSleep||0,
-    deep7:sl.slice(-7).map(r=>r.deep||0),
-    resp:mean(respV.slice(-7)),
-    vo2:last(vo2V), vo2First:vo2V.length?vo2V[0]:0, vo2V,
-    tempDev:tempV.length>=8?+(last(tempV)-median(tempV.slice(0,-1))).toFixed(2):0,
+    vo2:last(vo2V),
+    tempDev:(tempFresh&&tempV.length>=8)?+(last(tempV)-median(tempV.slice(0,-1))).toFixed(2):0,
     consec:consecutiveTraining(), phase:confirmPhase(hrvV),
     core:coreLevel(), deload:deloadWeek(), pelvic:true
   };
   const src=recSources(130);
   S.rec=recoveryOn(TODAY,src);
-  S.fit=fitnessNow();
   S.hrvBand=S.rec&&S.rec.hrvBand;
   S.rhrBand=S.rec&&S.rec.rhrBand;
-  S.hrvZtoday=S.rec?zOf(S.hrv,S.rec.hrvStats):null;
   S.belowStreak=belowBandStreak(src,S.hrvBand);
   S.activeDays=activeDays();
   S.resp=respState();
   S.loadRatio=loadRatio();
   S.feel=feelOf();
   S.stress=stressFlag();
+  S.ready=readiness();
+  updateJogLevel();
   S.verdict=decideDay();
   S.plan=dayPlan();
-  S.score=S.rec?{total:S.rec.total,parts:S.rec.parts}:calcScore();
 }
-
-/* ═══ 8b. WEEKLY SET VOLUME PER MUSCLE ═══
-   Evidence puts the useful band at roughly 8-12 hard sets
-   per muscle group per week, with diminishing returns above. */
-function weeklyVolume(weeksBack){
-  const from=addDays(weekStart(),-7*(weeksBack||0));
-  const to=weeksBack?addDays(from,6):TODAY;
-  const out={};
-  sessions().filter(x=>x.date>=from&&x.date<=to&&!x.skipped&&x.exercises).forEach(x=>{
-    Object.entries(x.exercises).forEach(([id,sets])=>{
-      const e=EX_DB[id];if(!e)return;
-      const n=sets.filter(y=>y.done).length;
-      if(n)out[e.muscle]=(out[e.muscle]||0)+n;
-    });
-  });
-  return out;
-}
-const VOL_BAND=[8,12];
 
 /* ═══ 8c. SESSION LOAD — how hard was yesterday, really ═══ */
 function sessionLoad(date){
@@ -774,26 +751,13 @@ function sessionLoad(date){
 }
 function loadWord(n){return n>=18?'heavy':n>=10?'moderate':n>0?'light':'none';}
 
-/* ═══ 8d. MAINTENANCE MODE ═══
-   A missed week does not have to cost your progress: strength holds
-   for months on roughly one hard session a week. */
-function weeksSinceTraining(){
-  const last=realSessions().map(x=>x.date).sort().pop();
-  if(!last)return 0;
-  return Math.floor(daysBetween(last,TODAY)/7);
-}
-function maintenanceMode(){
-  if(DB.get('maintenance_off_'+weekStart()))return false;
-  return weeksSinceTraining()>=1;
-}
-
 /* ═══ 9. THE DAY VERDICT — single source of truth ═══ */
 const STATES={
   rest:{label:'Rest day',col:'var(--red)',bg:'var(--rd)',bd:'rgba(248,113,113,.25)'},
   softrest:{label:'Rest recommended',col:'var(--yellow)',bg:'var(--yd)',bd:'rgba(251,191,36,.25)'},
   ease:{label:'Ease off',col:'var(--yellow)',bg:'var(--yd)',bd:'rgba(251,191,36,.25)'},
   normal:{label:'Normal day',col:'var(--t1)',bg:'var(--bg2)',bd:'var(--line)'},
-  room:{label:'Room to push',col:'var(--green)',bg:'var(--gd)',bd:'rgba(74,222,128,.25)'},
+  room:{label:'Good to go',col:'var(--green)',bg:'var(--gd)',bd:'rgba(74,222,128,.25)'},
   deload:{label:'Deload week',col:'var(--blue)',bg:'rgba(125,166,240,.08)',bd:'rgba(125,166,240,.28)'},
   backoff:{label:'Back off',col:'var(--red)',bg:'var(--rd)',bd:'rgba(248,113,113,.3)'},
   stale:{label:'No fresh reading',col:'var(--t2)',bg:'var(--bg2)',bd:'var(--line)'}
@@ -803,7 +767,7 @@ const PLANS={
   softrest:{strength:'Rest recommended — override if you feel good',aerobic:'Moderate block fine — no intervals',walk:'45–60 min',steps:'10,000',cap:'148 bpm'},
   ease:{strength:'Session minus one set',aerobic:'Moderate 15 min, skip intervals',walk:'45–60 min',steps:'9,000',cap:'140 bpm'},
   normal:{strength:'Session as planned',aerobic:'Full block · 140–148 bpm',walk:'45–60 min',steps:'10,000',cap:'148 bpm'},
-  room:{strength:'Session as planned',aerobic:'Intervals — spend it here',walk:'60 min',steps:'11,000',cap:'170 bpm'},
+  room:{strength:'Session as planned',aerobic:'Block as planned',walk:'60 min',steps:'11,000',cap:'170 bpm'},
   deload:{strength:'One set less on everything',aerobic:'Moderate only — no intervals this week',walk:'45–60 min',steps:'10,000',cap:'148 bpm'},
   backoff:{strength:'Two sets, same weights — nothing new',aerobic:'No block until both signals settle',walk:'45 min, easy',steps:'8,000',cap:'130 bpm'},
   stale:{strength:'Session as planned if you feel fine',aerobic:'Moderate only — flying blind on intervals',walk:'45–60 min',steps:'10,000',cap:'148 bpm'}
@@ -899,45 +863,10 @@ function decideDay(){
   return {k,why,plan:PLANS[k]};
 }
 
-/* ═══ 10. SCORE ═══ */
-/* Same weights, but for any date, so history can be rebuilt from the
-   health data you already have instead of needing to be stored. */
-function scoreParts(hrv7,rhr7,totSleep,deep,vo2,resp,bp){
-  const hs=hrv7>=40?35:hrv7>=25?35*((hrv7-25)/15):0;
-  const rs=rhr7<=0?10:Math.max(0,Math.min(20,20*(1-(rhr7-55)/15)));
-  const dur=totSleep<=0?0:Math.max(0,Math.min(15,15*((totSleep-5.5)/2)));
-  const dp=deep<=0?0:Math.min(5,5*(deep/0.9));
-  const vs=vo2<=0?7.5:Math.max(0,Math.min(15,15*((vo2-32)/10)));
-  const bs=resp<=0?2.5:resp<14?5:resp<15?3:1;
-  const ps=bp?((bp.sys<130&&bp.dia<85)?5:(bp.sys<140&&bp.dia<90)?3:1):2.5;
-  return {total:Math.max(0,Math.min(100,Math.round(hs+rs+dur+dp+vs+bs+ps))),
-    parts:[['HRV',hs,35],['Resting HR',rs,20],['Sleep duration',dur,15],['Deep sleep',dp,5],
-      ['VO2max',vs,15],['Blood pressure',ps,5]]};
-}
-let _hist=null;
-function scoreHistory(days){
-  const key=days+'|'+TODAY;
-  if(_hist&&_hist.key===key)return _hist.out;
-  const src=recSources(days+70);
-  const out=[];
-  for(let k=days-1;k>=0;k--){
-    const d=addDays(TODAY,-k);
-    const r=recoveryOn(d,src);
-    if(r)out.push({date:d,score:r.total});
-  }
-  _hist={key,out};
-  return out;
-}
-/* 85+ strong \u00B7 70-84 your normal \u00B7 55-69 below normal \u00B7 under 55 low */
+/* ═══ 10. RECOVERY WORDS ═══ */
+/* 85+ strong · 70-84 your normal · 55-69 below normal · under 55 low */
 function scoreColour(n){return n>=85?'var(--green)':n>=70?'var(--t1)':n>=55?'var(--yellow)':'var(--red)';}
 function scoreWord(n){return n>=85?'strong':n>=70?'your normal':n>=55?'below normal':'low';}
-function calcScore(){
-  const h=S.hrv7,r=mean(S.rhrV.slice(-7)),v=S.vo2,resp=S.resp;
-  const tot=mean(sleepRecords().slice(-7).map(x=>x.totalSleep||0));
-  const deep=mean(S.deep7);
-  const bp=(DB.get('bp_log')||[]).filter(x=>x.date>=addDays(TODAY,-14)).pop();
-  return scoreParts(h,r,tot,deep,v,resp,bp);
-}
 const EX_DB = {
   // ─── PUSH ───────────────────────────────
   push_up:       {name:'Push-up',         cat:'push', muscle:'chest',     eq:['bw'],      phases:[1,2,3], sets:{1:3,2:3,3:4}, reps:{1:'8-10',2:'10-15',3:'8-12'}, kg:0, bw:true,  neck_ok:true,  pelvis_ok:true,  note:'Shoulder blades active, neutral neck'},
@@ -1059,13 +988,6 @@ function nextType(){
     return ROTATION[(ROTATION.indexOf(t)+2)%3];
   }
   return t;
-}
-function legsDeferred(){
-  const man=DB.get('manual_session_type_'+TODAY);
-  if(man)return false;
-  const lastReal=realSessions().slice(-1)[0];
-  const due=lastReal?ROTATION[(ROTATION.indexOf(lastReal.type)+1)%3]:'push';
-  return due==='legs'&&nextType()!=='legs';
 }
 function pickCore(n){
   const pool=coreAvailable();
@@ -1193,10 +1115,14 @@ function autoAero(){
   return out;
 }
 function aeroLog(){
-  const man=(DB.get('aero_log')||[]).filter(e=>e&&e.date);
+  // a block he ticked off by hand takes the watch's numbers once they arrive
+  const auto=autoAero();
+  const man=manualAeroLog().map(e=>{
+    const a=auto[e.date];
+    return a&&a.mode===e.mode?Object.assign({},a,{pelvic:e.pelvic,hrv:e.hrv}):e;
+  });
   const taken=new Set(man.map(e=>e.date));
-  const auto=Object.values(autoAero()).filter(e=>!taken.has(e.date));
-  return man.concat(auto).sort((a,b)=>a.date.localeCompare(b.date));
+  return man.concat(Object.values(auto).filter(e=>!taken.has(e.date))).sort((a,b)=>a.date.localeCompare(b.date));
 }
 function manualAeroLog(){return (DB.get('aero_log')||[]).filter(e=>e&&e.date);}
 const AUTO_NAMES={bike:'Cycling',jog:'Run',row:'Rowing',swim:'Swim',
@@ -1210,9 +1136,11 @@ function aeroWeek(){
    time spent in the right zone is. */
 function aeroTargetCount(){const n=DB.get('aero_target');return (n&&n>=2&&n<=5)?n:3;}
 Object.defineProperty(window,'AERO_TARGET',{get:function(){return aeroTargetCount();}});
+/* Block length follows the last block he actually did, not the number
+   of weeks since the first one. After three weeks away it restarts at 20. */
 function aeroMinutes(){
-  const w=aeroWeek();
-  let m=w<=2?20:w<=4?25:30;
+  const l=manualAeroLog().filter(a=>a.mode==='stepup').pop();
+  let m=!l?20:daysBetween(l.date,TODAY)>21?Math.min(20,l.minutes||20):Math.min(30,l.minutes||20);
   if(S.verdict.k==='ease')m=Math.min(m,15);
   return m;
 }
@@ -1239,57 +1167,101 @@ function ropeThisWeek(){return aeroThisWeek().filter(a=>a.mode==='rope').length;
 function weekStart(){const d=new Date(TODAY);d.setDate(d.getDate()-((d.getDay()+6)%7));return iso(d);}
 function aeroThisWeek(){const ws=weekStart();
   return aeroLog().filter(e=>e.date>=ws&&e.date<=TODAY);}
-/* Two blocks a week, on whichever days suit you. The only hard rule is
-   a day between them; a fixed weekday was my invention, not evidence. */
-function daysLeftInWeek(){return 7-((new Date(TODAY).getDay()+6)%7);}
-function aeroOpen(){
-  if(S.plan&&S.plan.do!=='aerobic'&&S.plan.do!=='rest')return false;
-  if(aeroThisWeek().length>=AERO_TARGET)return false;
-  if(S.verdict&&S.verdict.k==='backoff')return false;
-  if(S.verdict&&S.verdict.k==='rest'&&!S.verdict.soft)return false;
-  // Back-to-back days only block you at the lower targets; at 4 or 5 a
-  // week they are unavoidable and fine at moderate intensity.
-  if(AERO_TARGET<=3&&aeroYesterday())return false;
-  return true;
-}
-/* What already counted this week, and where it came from. */
-function aeroWeekList(){
-  const l=aeroThisWeek();
-  if(!l.length)return '';
-  return '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">'+
-    l.map(e=>'<div class="row" style="padding:3px 0">'+
-      '<span class="muted">'+h(modeName(e.mode))+(e.auto?' \u00B7 watch':' \u00B7 logged')+'</span>'+
-      '<span class="muted">'+e.minutes+' min'+(e.avg?' \u00B7 '+e.avg+' bpm':'')+'</span></div>').join('')+
-    '</div>';
-}
-function aeroUrgent(){
-  // Chasing a weekly quota in the last two days is exactly how three hard
-  // efforts landed in one week. A missed block is missed; it never nags.
-  return false;
-}
-function isAeroDay(){return aeroOpen();}
 function aeroYesterday(){return aeroLog().some(e=>e.date===addDays(TODAY,-1));}
-function nextAeroDay(){
-  if(aeroThisWeek().length>=AERO_TARGET)return 'next week';
-  if(aeroYesterday())return 'tomorrow';
-  return 'any day this week';
-}
 function zoneFor(mode){
   const k=(AERO_MODES[mode]||{}).kind||'steady';
-  return k==='interval'?ZONE.interval:(k==='jog'||k==='jogwalk')?[140,155]:ZONE.moderate;
+  return k==='interval'?ZONE.interval:k==='jogwalk'?[140,155]:ZONE.moderate;
 }
-/* Continuous jogging. Ten per cent a week is the rule connective tissue
-   can keep up with; the first three sessions do not move at all. */
-function jogRuns(){return aeroLog().filter(a=>a.mode==='jog');}
-function jogMinutes(){
-  const runs=jogRuns();
-  const base=DB.get('jog_base')||11;
-  if(runs.length<3)return base;
-  const third=runs[2].date;
-  const weeks=Math.max(0,Math.floor(daysBetween(third,TODAY)/7));
-  return Math.min(30,Math.round(base*Math.pow(1.1,weeks)));
+/* ═══ RUNS ═══
+   What a run was, in the three numbers he steers on: how long he ran
+   without a break, at what pace, at what heart rate. Pace and heart rate
+   come from minutes 6-15, after the warm-up and before any drift, so two
+   runs of different length stay comparable. Whole-run averages do not
+   work here: his recordings include the walk home. */
+const RUN_KMH=7.0;
+function tsec(s){
+  const m=String(s||'').match(/(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)/);
+  return m?Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6])/1000:0;
 }
-function jogHeldFor(){return Math.max(0,3-jogRuns().length);}
+function toKm(q,u){return (q||0)*(u==='mi'?1.609344:u==='m'?0.001:1);}
+function runDetail(w){
+  const t0=Math.floor(tsec(w.start)/60);
+  if(!t0)return null;
+  const hr={},km={};
+  (w.heartRateData||[]).forEach(r=>{
+    const k=Math.floor(tsec(r.date)/60)-t0,v=r.Avg||r.avg||r.qty;
+    if(k>=0&&v)hr[k]=v;});
+  (w.walkingAndRunningDistance||[]).forEach(r=>{
+    const k=Math.floor(tsec(r.date)/60)-t0;
+    if(k>=0)km[k]=(km[k]||0)+toKm(r.qty,r.units);});
+  const ks=Object.keys(km).map(Number).sort((a,b)=>a-b);
+  if(ks.length<8)return null;
+  let cont=0,cur=0,runMin=0,prev=-9;
+  ks.forEach(k=>{
+    if(km[k]*60>=RUN_KMH){runMin++;cur=(k===prev+1)?cur+1:1;prev=k;if(cur>cont)cont=cur;}
+  });
+  const win=[6,7,8,9,10,11,12,13,14,15];
+  const hs=win.filter(k=>hr[k]).map(k=>hr[k]);
+  const sKmh=win.reduce((a,k)=>a+(km[k]||0),0)/win.length*60;
+  const ok=hs.length>=5&&sKmh>=RUN_KMH;
+  return {cont,runMin,sHr:ok?Math.round(mean(hs)):0,sKmh:ok?+sKmh.toFixed(1):0,n:hs.length};
+}
+function runList(){return (DB.get('runs')||[]).slice().sort((a,b)=>a.id.localeCompare(b.id));}
+function hrvOnDay(date){
+  const m=HM().heart_rate_variability||[];
+  for(let i=m.length-1;i>=0;i--)if(String(m[i].date||'').slice(0,10)===date)return +(+m[i].qty||0).toFixed(1);
+  return 0;
+}
+/* Keep a run. A later import that carries the per-minute detail upgrades
+   a run that was first stored as totals only. */
+function upsertRun(rec){
+  const l=DB.get('runs')||[];
+  const i=l.findIndex(x=>x.id===rec.id);
+  if(i<0){l.push(rec);DB.set('runs',l.slice(-300));return true;}
+  if(!l[i].cont&&rec.cont){l[i]=Object.assign({},l[i],rec);DB.set('runs',l);return true;}
+  return false;
+}
+/* Like with like: a hilly route or a low-HRV morning costs heart rate
+   that has nothing to do with fitness. */
+function runFlags(r){
+  const f=[];
+  if(r.up&&r.km&&r.up/r.km>=15)f.push('hilly');
+  if(r.hrv&&r.hrv<31)f.push('low HRV');
+  return f;
+}
+/* ═══ JOG LENGTH — from the log, not the calendar ═══
+   Three runs at one length, then two minutes more. It used to grow ten
+   per cent a week from the date of the third run, whether he ran or was
+   in bed with a cold. */
+function allRuns(){
+  const r=runList().map(x=>({date:x.date,min:x.min}));
+  const have=new Set(r.map(x=>x.date));
+  manualAeroLog().forEach(a=>{if(a.mode==='jog'&&!have.has(a.date))r.push({date:a.date,min:a.minutes||0});});
+  return r.sort((a,b)=>a.date.localeCompare(b.date));
+}
+function updateJogLevel(){
+  const all=allRuns();
+  if(all.length<3)return;
+  let L=DB.get('jog_level');
+  if(!L){
+    const l3=all.slice(-3),ms=l3.map(x=>x.min).sort((a,b)=>a-b);
+    L={min:Math.round(ms[1]),since:l3[0].date};
+    DB.set('jog_level',L);
+  }
+  const at=all.filter(x=>x.date>=L.since&&x.min>=L.min-2.5);
+  if(at.length>=3)
+    DB.set('jog_level',{min:Math.min(40,L.min+2),since:addDays(at[2].date,1),from:L.min});
+}
+function jogPlan(){
+  const all=allRuns(),L=DB.get('jog_level');
+  if(!L||all.length<3)return {min:DB.get('jog_base')||11,why:'First runs — short and easy, the same length three times'};
+  const gap=daysBetween(all[all.length-1].date,TODAY);
+  if(gap>=14)return {min:Math.max(10,Math.round(L.min*0.8)),why:gap+' days since your last run — one step back to restart'};
+  const at=all.filter(x=>x.date>=L.since&&x.min>=L.min-2.5).length;
+  if(at===0&&L.from)return {min:L.min,why:'Three runs done at '+L.from+' min — two minutes added, same pace'};
+  return {min:L.min,why:'Hold '+L.min+' min — '+(3-at)+' more run'+(3-at===1?'':'s')+' at this length before adding time'};
+}
+function jogMinutes(){return jogPlan().min;}
 /* Walk-jog: hold the same dose for three weeks before changing anything.
    Connective tissue lags well behind how the session feels. */
 function jogProtocol(){
@@ -1386,83 +1358,157 @@ function sparkline(id,data,col){
   x.beginPath();x.arc(X(data.length-1),Y(data[data.length-1]),2.6,0,7);x.fillStyle=col||'#9A9AA5';x.fill();
 }
 
+/* ═══ TODAY ═══
+   One question: what do I do today. Four blocks answer it — the call,
+   the one action, the week, and a line for how you feel. Everything that
+   only described the day moved to Progress. */
+let whyOpen=false,altOpen=false,feelOpen=false;
+function toggleWhy(){whyOpen=!whyOpen;renderVerdict();}
+function toggleAlt(){altOpen=!altOpen;renderWork();}
+function toggleFeelOpen(){feelOpen=!feelOpen;renderFoot();}
+function fmtK(n){return (Math.round(n/100)*100).toLocaleString('en-US');}
+function stepsAvg(){const s=metricSeries('step_count',9);return s.length?Math.round(mean(winVals(s,TODAY,7))):0;}
+
 function renderToday(){
   const d=new Date();
   el('t-date').textContent=DAYS[d.getDay()]+' '+d.getDate()+' '+MON[d.getMonth()];
-  el('t-hello').textContent=S.verdict.k==='rest'?'Rest today':S.verdict.k==='room'?'Good day':'Today';
-  el('t-phase').textContent=PHASE_NAME[S.phase];
-  const ws=weekStreak();
-  const lastStr=realSessions().map(x=>x.date).sort().pop();
-  const sinceStr=lastStr?daysBetween(lastStr,TODAY):null;
-  el('t-streak').textContent=sinceStr===null?'no strength logged yet'
-    :sinceStr===0?'lifted today'
-    :'last lift '+sinceStr+' day'+(sinceStr===1?'':'s')+' ago';
-
+  el('t-hello').textContent=S.plan.title;
+  renderFresh();
+  renderVerdict();
+  renderNotices();
+  renderWork();
   renderWeek();
-
-  // hero
-  const drift=(S.hrv7&&S.hrvPrev7)?S.hrv7-S.hrvPrev7:0;
-  const dcol=Math.abs(drift)<1?'var(--t3)':drift>0?'var(--green)':'var(--yellow)';
-  const dtxt=S.hrvPrev7?((drift>0?'+':'')+drift.toFixed(1)+' vs previous week'):'building a baseline';
-  const heroHTML=
-    '<div class="hero" style="margin-top:0"><div class="hero-lbl">HRV · 7-day average</div>'+
-    '<div><span class="hero-val" style="font-size:44px">'+(S.hrv7?S.hrv7.toFixed(1):'—')+'</span><span class="hero-unit">ms</span></div>'+
-    '<div class="hero-sub" style="color:'+dcol+'">'+dtxt+'</div>'+
-    '<canvas id="spark-hrv" class="spark"></canvas>'+
-    '<div style="margin-top:12px;padding-top:11px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline">'+
-      '<span class="muted" style="color:'+(S.hrvAge>=2?'var(--yellow)':'var(--t3)')+'">'+
-        (S.hrv?Math.round(S.hrv)+' ms \u00B7 '+(S.hrvAge===0?'today':S.hrvAge===1?'yesterday':
-          S.hrvDate+' ('+S.hrvAge+' days old)'):'no reading')+'</span>'+
-      '<span class="muted">'+todayVsWeek()+'</span>'+
-    '</div>'+
-    (S.hrvBand?'<div class="muted" style="margin-top:6px;text-align:left">Your normal band '+S.hrvBand[0].toFixed(0)+'\u2013'+S.hrvBand[1].toFixed(0)+' ms · last 60 days · inside it is the good signal</div>':'')+
-    '</div>';
-
-  const dS=S.deep, sc=S.score.total;
-  const stripHTML='<div class="strip" style="margin-bottom:0">'+
-    cell(S.rhr?Math.round(S.rhr):'—','Rest HR',S.rhr&&S.rhrBase?(S.rhr<=S.rhrBase?'var(--green)':'var(--yellow)'):'')+
-    cell(S.totalSleep?S.totalSleep.toFixed(1):'—','Sleep',S.totalSleep>=7.5?'var(--green)':'')+
-    cell(dS?dS.toFixed(1):'—','Deep',dS>=1?'var(--green)':dS>=.6?'var(--yellow)':'var(--red)')+
-    cell(sc,'Recovery',scoreColour(sc))+'</div>';
-  el('t-signals').innerHTML=heroHTML+stripHTML+vo2Line();
-  setTimeout(()=>sparkline('spark-hrv',S.hrvV.slice(-30),'#7DA6F0'),0);
-
-  // verdict
+  renderFoot();
+}
+/* The morning import is the first thing he does, and it sat two taps
+   deep in Settings. It shows here until today has a reading. */
+function renderFresh(){
+  el('t-fresh').innerHTML=S.hrvAge>=1
+    ?'<button class="btn btn-go" onclick="pasteImport()">Paste this morning’s health data</button>':'';
+}
+function whyHTML(){
+  const P=S.plan,R=S.ready,B=S.hrvBand;
+  let s='<div style="margin-top:6px;padding-top:10px;border-top:1px solid var(--line)">';
+  s+='<div class="muted" style="color:var(--t2)">HRV '+(S.hrv?Math.round(S.hrv):'—')+' ms'+
+    (S.hrvAge===0?' this morning':S.hrvAge===1?' yesterday':S.hrv?' · '+S.hrvAge+' days old':'')+
+    ' · 7-day '+(S.hrv7?S.hrv7.toFixed(1):'—')+
+    (B?' · your band '+B[0].toFixed(0)+'–'+B[1].toFixed(0):'')+'</div>';
+  P.why.slice(1,4).forEach(w=>{s+='<div class="muted" style="color:var(--t2)">· '+h(w)+'</div>';});
+  P.off.forEach(x=>{s+='<div class="muted">✕ '+h(x)+'</div>';});
+  s+='<div class="muted" style="margin-top:6px">Walking '+h(S.verdict.plan.walk)+' · '+S.verdict.plan.steps+
+    ' steps · ceiling '+h(P.cap)+'</div>';
+  if(R){
+    s+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">'+
+      '<div class="muted" style="margin-bottom:7px">Recovery '+R.total+' — last night against your own 60-day normal. 70–84 is your normal.</div>'+
+      R.parts.map(([l,v,m])=>'<div class="row" style="margin-bottom:5px;gap:8px"><span class="muted" style="width:108px;flex-shrink:0">'+l+'</span>'+
+        '<div style="flex:1;height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+
+        (v===null?0:Math.round(v/m*100))+'%;background:var(--t2)"></div></div>'+
+        '<span class="muted" style="width:44px;text-align:right;flex-shrink:0">'+(v===null?'—':Math.round(v)+'/'+m)+'</span></div>').join('')+
+      (R.caps.length?'<div class="muted" style="color:var(--yellow);margin-top:4px">Held at '+R.total+' — '+h(R.caps[0])+'</div>':'')+
+      '</div>';
+  }
+  return s+'</div>';
+}
+function renderVerdict(){
   const V=STATES[S.verdict.soft?'softrest':S.verdict.k]||STATES.normal;
-  const P=S.plan;
-  const ICON={strength:'\u25C6',aerobic:'\u25B2',rest:'\u25CF',easy:'\u25CB'}[P.do]||'\u25C6';
+  const P=S.plan,R=S.ready;
   el('t-verdict').innerHTML=
     '<div class="verdict" style="background:'+V.bg+';border-color:'+V.bd+'">'+
-      '<div class="v-head"><div class="v-title" style="color:'+V.col+'">'+ICON+' '+h(P.title)+'</div>'+
-      '<div class="v-meta">HRV '+(S.hrv?Math.round(S.hrv):'\u2014')+' \u00B7 7d '+(S.hrv7?Math.round(S.hrv7):'\u2014')+
-        (S.hrvBand?'<div style="margin-top:2px;font-size:9px">'+(S.hrv>S.hrvBand[1]?'above band':S.hrv<S.hrvBand[0]?'below band':'in band')+'</div>':'')+
-      '</div></div>'+
-      '<div style="font-size:14px;color:var(--t1);margin:2px 0 10px">'+h(P.sub)+'</div>'+
-      '<div class="v-plan" style="border-top:1px solid var(--line);padding-top:10px">'+
-        P.why.slice(0,3).map(w=>'<div style="display:block;padding:2px 0;color:var(--t2)">\u00B7 '+h(w)+'</div>').join('')+
+      '<div class="row" style="align-items:flex-start">'+
+        '<div style="flex:1"><div style="font-size:14px;color:var(--t1);line-height:1.45">'+h(P.sub)+'</div>'+
+          '<div class="muted" style="margin-top:7px;color:var(--t2)">'+h(P.why[0]||'')+'</div></div>'+
+        (R?'<div style="text-align:right;flex-shrink:0"><div class="ready" style="color:'+scoreColour(R.total)+'">'+R.total+'</div>'+
+          '<div class="muted" style="font-size:9px;margin-top:4px">recovery · '+scoreWord(R.total)+'</div></div>':'')+
       '</div>'+
-      (P.off.length?'<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line)">'+
-        P.off.map(x=>'<div class="muted" style="padding:2px 0;color:var(--t3)">\u2715 '+h(x)+'</div>').join('')+
-      '</div>':'')+
-      '<div class="muted" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);display:flex;justify-content:space-between">'+
-        '<span>Walking '+h(S.verdict.plan.walk)+'</span><span>Ceiling '+h(P.cap)+'</span></div>'+
+      '<button class="lnk" style="margin-top:4px" onclick="toggleWhy()">'+(whyOpen?'Hide ▴':'Why ▾')+'</button>'+
+      (whyOpen?whyHTML():'')+
     '</div>';
+}
 
-
-  renderFeel();
-  renderNotices();
-  const w=el('t-work');
-  w.innerHTML='<div id="blk-a"></div><div id="blk-b"></div>';
-  // Strength before endurance when both fall on one day: the order
-  // with the measured advantage for lower-body strength.
-  renderSession('blk-a'); renderAerobic('blk-b');
-  renderLog();
+/* ═══ THE ONE ACTION ═══
+   The plan names one thing. Only that thing gets a card; everything else
+   waits behind "Other options", so the screen can no longer offer a green
+   Start button for the session the call just ruled out. */
+function strengthDoneToday(){return realSessions().some(s=>s.date===TODAY);}
+function plannedAeroMode(){
+  if(feelHas('feet'))return 'stepup';
+  if(jogThisWeek()>=Math.max(1,AERO_TARGET-1))return 'stepup';
+  return 'jog';
+}
+function hardStop(){const v=S.verdict;return v.k==='backoff'||(v.k==='rest'&&!v.soft);}
+function canOverride(){
+  const v=S.verdict;
+  return v.k==='rest'&&!DB.get('override_rest_'+TODAY)&&(v.soft||S.activeDays>=6)&&
+    !(S.tempDev>0.5)&&!(S.hrv&&S.hrv<25)&&S.consec<2;
+}
+function doneCard(t,sub){
+  return '<div class="card" style="border-color:rgba(74,222,128,.25);background:var(--gd)">'+
+    '<div style="color:var(--green);font-size:13px">'+t+'</div>'+
+    (sub?'<div class="muted" style="margin-top:4px">'+sub+'</div>':'')+'</div>';
+}
+function jogCard(){
+  const jp=jogPlan(),z=zoneFor('jog'),r=runList().pop();
+  const last=!r?'':'Last run '+shortDate(r.date)+': '+
+    (r.cont?r.cont+' min without a break'+(r.sKmh?' at '+r.sKmh.toFixed(1)+' km/h'+(r.sHr?', '+r.sHr+' bpm':''):'')
+           :r.km.toFixed(1)+' km in '+Math.round(r.min)+' min'+(r.avg?', '+r.avg+' bpm avg':''));
+  return '<div class="card">'+
+    '<div class="row" style="align-items:baseline"><div style="font-size:15px">Jog · '+jp.min+' min</div>'+
+      '<div class="muted" style="color:var(--t2)">'+z[0]+'–'+z[1]+' bpm</div></div>'+
+    '<div class="muted" style="margin-top:6px;color:var(--t2)">'+h(jp.why)+'</div>'+
+    (last?'<div class="muted" style="margin-top:4px">'+h(last)+'</div>':'')+
+    '<div class="muted" style="margin-top:4px">Your watch records it. Arch pain on the first steps tomorrow means stop.</div>'+
+    '<button class="btn" style="width:100%;margin:12px 0 0" onclick="markJog()">Mark done ✓</button></div>';
+}
+function markJog(){aeroMode='jog';aeroSave();}
+function walkCard(){
+  const pl=S.verdict.plan,st=stepsAvg();
+  return '<div class="card">'+
+    '<div class="row" style="align-items:baseline"><div style="font-size:15px">Walk · '+h(pl.walk)+'</div>'+
+      '<div class="muted" style="color:var(--t2)">under '+h(S.plan.cap)+'</div></div>'+
+    '<div class="muted" style="margin-top:6px;color:var(--t2)">Aim for '+pl.steps+' steps today'+
+      (st?' — your week averages '+fmtK(st):'')+'</div></div>';
+}
+function renderWork(){
+  const P=S.plan,w=el('t-work');
+  const sDone=strengthDoneToday(),aDone=aeroLog().filter(e=>e.date===TODAY).pop();
+  let top='';
+  if(sDone){
+    const s=realSessions().filter(x=>x.date===TODAY).pop();
+    const n=Object.values(s.exercises||{}).reduce((a,v)=>a+v.filter(y=>y.done).length,0);
+    top+=doneCard('Logged ✓ '+h(s.type),n+' sets');
+  }
+  if(aDone)top+=doneCard('Done ✓ '+h(modeName(aDone.mode))+(aDone.auto?' <span class="muted" style="font-size:9px">from your watch</span>':''),
+    aDone.minutes+' min'+(aDone.km?' · '+aDone.km+' km':'')+(aDone.avg?' · '+aDone.avg+' bpm avg':'')+
+    (aDone.pelvic?' · <span style="color:var(--yellow)">flagged</span>':''));
+  const mainStr=P.do==='strength'&&!sDone;
+  const mainAer=P.do==='aerobic'&&!aDone;
+  const jogMain=mainAer&&plannedAeroMode()==='jog';
+  let main='';
+  if(mainStr)main='<div id="blk-a"></div>';
+  else if(mainAer)main=jogMain?jogCard():'<div id="blk-b"></div>';
+  else if(P.do==='rest'||P.do==='easy')main=walkCard();
+  const stop=hardStop();
+  const altStr=!mainStr&&!sDone&&!stop&&S.verdict.k!=='rest';
+  const altAer=!aDone&&!stop&&!(mainAer&&!jogMain);
+  const hasAlt=altStr||altAer;
+  // never fold away a session or a timer that is already under way
+  const dr=DB.get('draft_'+TODAY);
+  if((dr&&Object.values(dr.marks||{}).some(m=>Object.values(m||{}).some(Boolean))&&!mainStr)||aeroRunning)altOpen=true;
+  const ov=canOverride()&&P.do!=='done';
+  const links=(hasAlt||ov)?'<div class="row" style="margin:-2px 20px 6px">'+
+    (hasAlt?'<button class="lnk" onclick="toggleAlt()">'+(altOpen?'Hide other options ▴':'Other options ▾')+'</button>':'<span></span>')+
+    (ov?'<button class="lnk" onclick="overrideRest()">Train anyway</button>':'')+'</div>':'';
+  const alt=(altOpen&&hasAlt)?(altAer?'<div id="blk-b"></div>':'')+(altStr?'<div id="blk-a"></div>':''):'';
+  w.innerHTML=top+main+links+alt;
+  if(el('blk-a'))renderSession('blk-a');
+  if(el('blk-b'))renderAerobic('blk-b');
 }
 /* ═══ THE WEEK ═══
    His failure mode was never one bad day. It was weeks that drifted:
    six active days running, then five aerobic blocks and no strength in
-   thirteen days. None of that was visible anywhere. One column per day,
-   bar height = active minutes, colour = what it was. */
+   thirteen days. One column per day, bar height = active minutes,
+   colour = what it was. Steps sit in the line underneath, because daily
+   volume is the lever his own numbers point at. */
 const WD=['M','T','W','T','F','S','S'];
 function shortDate(iso8){const d=new Date(iso8);return d.getDate()+' '+MON[d.getMonth()];}
 function weekDays(){
@@ -1484,152 +1530,78 @@ function renderWeek(){
   const L=loadSource();
   const peak=Math.max(L.hard||60,...days.filter(d=>!d.partial).map(d=>d.min));
   const nStr=days.filter(d=>d.str).length, nAer=days.filter(d=>d.aer).length;
-  const left=daysLeftInWeek();
   const cells=days.map(d=>{
     const pct=d.partial?100:(d.min?Math.max(8,Math.round(d.min/peak*100)):0);
     const col=d.str?'var(--green)':d.aer?'var(--blue)':'var(--t3)';
-    const op=d.partial?'.12':(d.str||d.aer?'.8':'.5');
+    const op=d.partial?(d.str||d.aer?'.45':'.12'):(d.str||d.aer?'.8':'.5');
     return '<div class="'+(d.today?'now':d.future?'fut':'')+'">'+
       '<u>'+WD[d.i]+'</u><b>'+(+d.date.slice(8))+'</b>'+
       '<div class="trk">'+(pct?'<div class="fil" style="height:'+pct+'%;background:'+col+';opacity:'+op+'"></div>':'')+'</div>'+
       '</div>';
   }).join('');
-  const tgt=AERO_TARGET;
+  const tgt=AERO_TARGET,st=stepsAvg();
   const strCol=nStr>=2?'var(--green)':nStr===1?'var(--yellow)':'var(--red)';
   const aerCol=nAer>=tgt?'var(--green)':'var(--t2)';
+  const stale=L.ser.length&&daysBetween(L.ser[L.ser.length-1][0],TODAY)>=2;
   el('t-week').innerHTML='<div class="wk">'+cells+'</div>'+
     '<div class="wk-sum"><span class="muted">'+
       '<span style="color:'+strCol+'">'+nStr+' strength</span> · '+
       '<span style="color:'+aerCol+'">'+nAer+'/'+tgt+' aerobic</span>'+
-      (L.label?' · bars are '+L.label:'')+'</span>'+
-      (L.ser.length&&L.ser[L.ser.length-1][0]<TODAY
-        ?'<span class="muted" style="color:var(--yellow)">data to '+shortDate(L.ser[L.ser.length-1][0])+'</span>':
-    '<span class="muted">'+(left===0?'last day of the week':left+' day'+(left===1?'':'s')+' left')+'</span>')+'</div>';
+      (st?' · <span style="color:'+(st>=8000?'var(--green)':'var(--t2)')+'">'+fmtK(st)+' steps a day</span>'+(st<8000?', goal 8,000':''):'')+
+      '</span>'+
+      (stale?'<span class="muted" style="color:var(--yellow)">data to '+shortDate(L.ser[L.ser.length-1][0])+'</span>':'')+'</div>';
 }
-
-/* One morning is noisy; show how far it sits from the trend. */
-function todayVsWeek(){
-  if(!S.hrv)return '';
-  const B=S.hrvBand;
-  if(!B){
-    if(!S.hrv7)return '';
-    const d=(S.hrv-S.hrv7)/S.hrv7*100;
-    return Math.abs(d)<8?'in line with the week':(d>0?'+':'')+Math.round(d)+'% vs week';
-  }
-  if(S.hrv<B[0]){
-    const n=S.belowStreak||1;
-    return '<span style="color:'+(n>=3?'var(--red)':'var(--yellow)')+'">below your band \u00B7 day '+n+(n<3?' of 3':'')+'</span>';
-  }
-  if(S.hrv>B[1])return '<span style="color:var(--green)">above your band</span>';
-  return 'inside your band';
+/* ═══ HOW YOU FEEL · MEASUREMENTS ═══
+   Both are used now and then, so both are one line until tapped. */
+function renderFoot(){
+  const f=feelOf();
+  const on=FEELS.filter(x=>f.chips.indexOf(x.id)>=0).map(x=>x.label);
+  const wt=(DB.get('weight_log')||[]).filter(r=>r.date===TODAY)[0];
+  el('t-foot').innerHTML='<div class="foot">'+
+    '<button class="lnk" style="color:'+(on.length?'var(--yellow)':'var(--t2)')+';text-align:left" onclick="toggleFeelOpen()">'+
+      (on.length?h(on.join(' · ')):'How do you feel')+' '+(feelOpen?'▴':'▾')+'</button>'+
+    '<button class="lnk" style="color:'+(wt?'var(--green)':'var(--t2)')+';flex-shrink:0" onclick="openMeasure()">'+
+      (wt?wt.kg+' kg ✓':'+ Weight')+'</button></div>'+
+    (feelOpen?feelHTML():'');
 }
-function cell(v,l,col){return '<div><b'+(col?' style="color:'+col+'"':'')+'>'+v+'</b><span>'+l+'</span></div>';}
-function row(k,v){return '<div><u>'+k+'</u><span>'+h(v)+'</span></div>';}
-
-/* VO2max is the metric the whole aerobic plan exists for, so show
-   whether the last four weeks are actually moving the right way. */
-function vo2Line(){
-  const v=metricSeries('vo2_max',120);
-  if(v.length<2)return '';
-  const now=v[v.length-1][1];
-  const monthAgo=v.filter(e=>e[0]<=addDays(TODAY,-28)).pop();
-  const start=v[0];
-  const d28=monthAgo?now-monthAgo[1]:null;
-  const dAll=now-start[1];
-  const col=d28===null?'var(--t3)':d28>=0.3?'var(--green)':d28<=-0.3?'var(--red)':'var(--t2)';
-  /* It used to read "rising \u00B7 -0.1 since 2026-06-17" in one breath: a
-     four-week verdict stapled to a since-the-start number. Each clause
-     now names the window it belongs to. */
-  const near=d28===null?'no four-week comparison yet'
-    :Math.abs(d28)<0.3?'flat over four weeks'
-    :(d28>0?'up ':'down ')+Math.abs(d28).toFixed(1)+' over four weeks';
-  const far=Math.abs(dAll)<0.3?'level with '+shortDate(start[0])
-    :(dAll>0?'up ':'down ')+Math.abs(dAll).toFixed(1)+' since '+shortDate(start[0]);
-  return '<div class="note" style="border-color:var(--line);background:var(--bg2)">'+
-    '<div class="row" style="align-items:baseline">'+
-      '<b style="font-weight:400">VO2max '+now.toFixed(1)+'</b>'+
-      '<span style="color:'+col+';font-size:11px">'+(d28===null?'':
-        (Math.abs(d28)<0.3?'unchanged in 4 weeks':(d28>0?'+':'')+d28.toFixed(1)+' in 4 weeks'))+'</span>'+
-    '</div>'+
-    '<span class="muted">'+(d28===null?near+' \u00B7 ':'')+far+
-      ' \u00B7 target 40+, the aerobic blocks are the lever</span></div>';
+function openMeasure(){
+  const w=(DB.get('weight_log')||[]),lw=w.length?w[w.length-1]:null;
+  const b=(DB.get('bp_log')||[]),lb=b.length?b[b.length-1]:null;
+  openSheet('<div style="padding:0 16px 20px"><div class="sec" style="margin:8px 0 10px">Measurements</div>'+
+    '<div class="card" style="margin:0 0 10px"><div class="muted" style="margin-bottom:8px">Weight'+
+      (lw?' · last '+lw.kg+' kg on '+shortDate(lw.date):'')+'</div>'+
+    '<div class="inline"><input type="number" step="0.1" id="in-weight" placeholder="kg" inputmode="decimal"><button onclick="logWeight()">Save</button></div></div>'+
+    '<div class="card" style="margin:0"><div class="muted" style="margin-bottom:8px">Blood pressure'+
+      (lb?' · last '+lb.sys+'/'+lb.dia+' on '+shortDate(lb.date):'')+'</div>'+
+    '<div class="inline"><input type="number" id="in-sys" placeholder="sys" inputmode="numeric"><input type="number" id="in-dia" placeholder="dia" inputmode="numeric"><button onclick="logBp()">Save</button></div></div></div>');
 }
-/* ═══ ONE NOTICE, RANKED ═══
-   Four stacked boxes taught him to dismiss boxes. Worse, two of them
-   contradicted each other \u2014 "load piling up" above "maintenance mode",
-   one saying too much and one saying too little. Both were true and the
-   honest reading is a single sentence about balance. */
-function balanceState(){
-  const from=addDays(TODAY,-13);
-  const str=realSessions().filter(x=>x.date>=from&&x.date<=TODAY).length;
-  const aer=aeroLog().filter(a=>a.date>=from&&a.date<=TODAY).length;
-  const last=realSessions().map(x=>x.date).sort().pop();
-  return {str,aer,days:14,since:last?daysBetween(last,TODAY):null};
-}
+/* ═══ ONE NOTICE ═══
+   Only for load the plan cannot show by itself. The strength gap is no
+   longer a warning: after seven days the plan simply says lift. */
 function signalList(){
   const out=[];
-  const b=balanceState();
-  const gap=b.since===null?'':b.since+' days since your last lift';
-  if(b.since!==null&&b.since>=14)
-    out.push({sev:2,title:'Strength is slipping',short:gap,
-      text:gap+'. Strength holds for months on one hard session a week, but not on none \u2014 '+
-        'this is now the single thing costing you most.'+(b.aer?' '+b.aer+' aerobic block'+(b.aer===1?'':'s')+' in that time.':''),maint:true});
-  else if(b.since!==null&&b.since>=10&&b.aer>=2)
-    out.push({sev:2,title:'Out of balance',short:gap+', '+b.aer+' aerobic blocks',
-      text:gap+', against '+b.aer+' aerobic block'+(b.aer===1?'':'s')+' in that time. '+
-        'One hard session a week holds strength for months \u2014 the gap is the problem, not the cardio.',maint:true});
-  else if(b.since!==null&&b.since>=7&&b.str<=1&&b.aer>=4)
-    out.push({sev:1,title:'Leaning on cardio',short:b.aer+' aerobic vs '+b.str+' strength in 14 days',
-      text:b.aer+' aerobic blocks against '+b.str+' strength session in '+b.days+' days'+
-        (gap?' \u2014 '+gap:'')+'. Even one more lift a week evens it out.',maint:maintenanceMode()});
-  else if(maintenanceMode()){
-    const w=weeksSinceTraining();
-    out.push({sev:1,title:'Maintenance mode',short:w+' week'+(w>1?'s':'')+' without a lift',
-      text:w+' week'+(w>1?'s':'')+' without a strength session. One hard full-body session a week holds '+
-        'strength for months \u2014 do that rather than writing the week off.',maint:true});
-  }
   const bits=[];
   if(S.activeDays>=4)bits.push(S.activeDays+' active days in a row');
   if(S.resp&&S.resp.daysHigh>=2)bits.push('night breathing up on '+S.resp.daysHigh+' of '+S.resp.n+' nights');
   if(S.loadRatio&&S.loadRatio>=1.4)bits.push('weekly load '+Math.round((S.loadRatio-1)*100)+'% over your usual');
-  if(bits.length)out.push({sev:bits.length>=2?2:1,title:'Load piling up',short:bits.join(' \u00B7 '),
-    text:bits.join(' \u00B7 ')+'. A full day off costs you nothing and settles all of it.'});
+  if(bits.length)out.push({sev:bits.length>=2?2:1,title:'Load piling up',
+    text:bits.join(' · ')+'. A full day off costs you nothing and settles all of it.'});
   if(S.tempDev>0.3&&S.tempDev<=0.5)
-    out.push({sev:1,title:'Wrist temperature',short:'+'+S.tempDev.toFixed(2)+'\u00B0C over baseline',
-      text:'+'+S.tempDev.toFixed(2)+'\u00B0C over baseline \u2014 under the 0.5 threshold, worth watching.'});
-  if(legsDeferred())
-    out.push({sev:0,title:'Legs moved',short:'an aerobic block loads the same muscles today or tomorrow',
-      text:'An aerobic block falls on this day or the next and loads the same calves and quads. Legs returns on the first clear day.'});
+    out.push({sev:1,title:'Wrist temperature',
+      text:'+'+S.tempDev.toFixed(2)+'°C over baseline — under the 0.5 threshold, worth watching.'});
   return out.sort((a,b)=>b.sev-a.sev);
 }
 function renderNotices(){
   const P=S.plan||{do:''};
-  const sig=signalList().filter(x=>{
-    if(P.do==='strength'&&/slipping|balance|cardio|Maintenance/i.test(x.title))return false;
-    if(/Load piling up/i.test(x.title)&&(P.do==='rest'||P.do==='easy'||/No aerobic/.test((P.off||[]).join(' '))))return false;
-    if(/Legs moved/i.test(x.title))return false;
-    return true;
-  });
+  const sig=signalList().filter(x=>
+    !(/Load piling up/i.test(x.title)&&(P.do==='rest'||P.do==='easy'||/No aerobic/.test((P.off||[]).join(' ')))));
   if(!sig.length){el('t-notices').innerHTML='';return;}
-  const top=sig[0], rest=sig.slice(1,3);
-  const C=top.sev>=2?['rgba(248,113,113,.28)','var(--rd)','var(--red)']
-        : top.sev===1?['rgba(251,191,36,.25)','var(--yd)','var(--yellow)']
-        : ['var(--line)','var(--bg2)','var(--t2)'];
-  const wantsMaint=sig.some(x=>x.maint)&&maintenanceMode();
+  const top=sig[0];
+  const C=top.sev>=2?['rgba(248,113,113,.28)','var(--rd)','var(--red)']:['rgba(251,191,36,.25)','var(--yd)','var(--yellow)'];
   el('t-notices').innerHTML=
     '<div class="note" style="border-color:'+C[0]+';background:'+C[1]+'">'+
-      '<b style="color:'+C[2]+'">'+h(top.title)+'</b>'+
-      '<span class="muted">'+h(top.text)+'</span>'+
-      (rest.length?'<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line)">'+
-        rest.map(x=>'<div class="muted" style="margin-bottom:3px"><span style="color:var(--t2)">'+
-          h(x.title)+'</span> \u00B7 '+h(x.short||x.text)+'</div>').join('')+'</div>':'')+
-      (wantsMaint?'<div style="display:flex;gap:8px;margin-top:10px">'+
-        '<button class="btn" style="width:auto;flex:1;margin:0;padding:10px;font-size:11px" onclick="setMaintenance()">Use it this week</button>'+
-        '<button class="btn btn-quiet" style="width:auto;flex:1;margin:0;padding:10px" onclick="dismissMaintenance()">Back to normal</button>'+
-        '</div>':'')+
-    '</div>';
+      '<b style="color:'+C[2]+'">'+h(top.title)+'</b><span class="muted">'+h(top.text)+'</span></div>';
 }
-function note(bd,bg,t,txt){return '<div class="note" style="border-color:'+bd+';background:'+bg+'"><b>'+t+'</b><span class="muted">'+h(txt)+'</span></div>';}
 
 /* ═══ 17. SESSION UI ═══ */
 let SESS=null;
@@ -1681,30 +1653,9 @@ function renderSession(slot){
   if(slot)SESS_SLOT=slot;
   const wrap=el(SESS_SLOT);
   if(!wrap)return;
-  // Only call it the session when the plan actually asked for one. On a
-  // day the app cannot call, it is an option, not an instruction.
+  // Only call it the session when the plan actually asked for one.
   const P=S.plan||{do:'strength'};
-  const lead='<div class="sec" style="margin-top:'+(SESS_SLOT==='blk-a'?'6px':'22px')+'">'+
-    (S.verdict.k==='rest'?"Today's session"
-      :P.do==='strength'?'Strength session':'If you do train today')+'</div>';
-  if(doneToday()){
-    const s=sessions().filter(x=>x.date===TODAY).pop();
-    wrap.innerHTML=lead+'<div class="card" style="border-color:rgba(74,222,128,.25);background:var(--gd)">'+
-      '<div style="color:var(--green);font-size:13px">Logged \u2713 '+h(s.type||'')+'</div>'+
-      '<div class="muted" style="margin-top:4px">'+thisWeekProgress()+' this week</div></div>';
-    return;
-  }
-  if(S.verdict.k==='rest'){
-    const soft=!!S.verdict.soft;
-    wrap.innerHTML=lead+'<div class="card"><div style="font-size:13px;margin-bottom:5px">'+
-      (soft?'A day between sessions':'Rest is the session')+'</div>'+
-      '<div class="muted">'+h(S.verdict.why[0])+'. '+
-      (soft?'Walking and the aerobic block are fine — neither is a strength stimulus.'
-           :'Easy walking is fine and helps — keep it under '+S.verdict.plan.cap+'.')+'</div></div>'+
-      '<button class="btn" onclick="logRest()">Log rest day</button>'+
-      '<button class="btn btn-quiet" onclick="overrideRest()">Train anyway</button>';
-    return;
-  }
+  const lead=P.do==='strength'?'':'<div class="sec" style="margin-top:10px">If you do train today</div>';
   const d=sessionDraft();
   const open=DB.get('sess_open_'+TODAY)===true;
   const totalSets=d.ids.reduce((a,id)=>a+targetFor(id).sets,0);
@@ -1718,16 +1669,16 @@ function renderSession(slot){
     for(let i=0;i<t.sets;i++){
       const on=d.marks[id]&&d.marks[id][i];
       sets.push('<div class="set'+(on?' done':'')+'" onclick="markSet(\''+id+'\','+i+')">'+
-        (t.kg?t.kg+'kg':'')+(t.kg?' \u00B7 ':'')+t.reps+'</div>');
+        (t.kg?t.kg+'kg':'')+(t.kg?' · ':'')+t.reps+'</div>');
     }
     return '<div class="ex"><div class="ex-top"><div class="ex-name">'+h(e.name)+'</div>'+
-      '<div class="ex-target">'+t.sets+' \u00D7 '+h(t.reps)+
-        '<div style="color:var(--t3);font-size:9px;margin-top:2px">1\u20133 reps in reserve</div>'+
+      '<div class="ex-target">'+t.sets+' × '+h(t.reps)+
+        '<div style="color:var(--t3);font-size:9px;margin-top:2px">1–3 reps in reserve</div>'+
         '<div onclick="event.stopPropagation();swapExercise(\''+id+'\')" style="color:var(--t3);font-size:9px;margin-top:5px;cursor:pointer;text-decoration:underline">swap</div>'+
       '</div></div>'+
       '<div class="ex-note">'+h(e.note||'')+'</div>'+
       (lastLine(id)?'<div class="ex-note" style="color:var(--t2);margin-top:5px">'+h(lastLine(id))+'</div>':'')+
-      (hint?'<div class="ex-hint">\u2191 '+h(hint)+'</div>':'')+
+      (hint?'<div class="ex-hint">↑ '+h(hint)+'</div>':'')+
       (secs?'<button class="btn btn-quiet" style="width:100%;margin:9px 0 0" onclick="runHold(\''+id+'\','+secs+')">Start '+secs+'s hold</button>':'')+
       '<div class="sets">'+sets.join('')+'</div></div>';
   }).join('');
@@ -1735,16 +1686,14 @@ function renderSession(slot){
   const summary=d.ids.map(id=>EX_DB[id]?EX_DB[id].name:'').filter(Boolean).join(', ');
 
   wrap.innerHTML=lead+'<div class="card">'+
-    '<div class="row" style="cursor:pointer;margin-bottom:'+(open?'10px':'0')+'" onclick="toggleSess()"><div style="font-size:14px;text-transform:capitalize">'+h(d.type)+' day</div>'+
-    '<div class="muted">'+d.ids.length+' exercises \u00B7 '+doneSets+'/'+totalSets+' sets</div></div>'+
+    '<div class="row" style="cursor:pointer;margin-bottom:'+(open?'10px':'0')+'" onclick="toggleSess()"><div style="font-size:15px;text-transform:capitalize">'+h(d.type)+' day</div>'+
+    '<div class="muted">'+d.ids.length+' exercises · '+doneSets+'/'+totalSets+' sets</div></div>'+
     (open?'<div class="modes">'+ROTATION.map(t=>'<button class="'+(t===d.type?'on':'')+'" onclick="setType(\''+t+'\')">'+t+'</button>').join('')+'</div>'+items
         :'<div class="muted" style="margin-top:7px;line-height:1.6">'+h(summary)+'</div>')+
-    '<button class="btn btn-quiet" style="width:100%;margin:'+(open?'12px':'14px')+' 0 0" onclick="toggleSess()">'+
-      (open?'Hide details':'Show exercises')+'</button>'+
+    '<button class="lnk" style="margin-top:8px" onclick="toggleSess()">'+(open?'Hide exercises ▴':'Show exercises ▾')+'</button>'+
+    '<button class="btn btn-go" style="width:100%;margin:8px 0 0;padding:17px;font-size:14px" onclick="startGuide()">Start workout</button>'+
+    '<button class="btn btn-quiet" style="width:100%;margin:4px 0 0;padding:10px" onclick="saveSession()">Log without guiding ✓</button>'+
     '</div>'+
-    '<button class="btn btn-go" style="padding:19px;font-size:14px" onclick="startGuide()">Start workout</button>'+
-    '<button class="btn" onclick="saveSession()">Log without guiding \u2713</button>'+
-    '<button class="btn btn-quiet" onclick="skipSession()">Skip today</button>'+
     '<div id="rest-timer"></div>';
 }
 function toggleSess(){DB.set('sess_open_'+TODAY,DB.get('sess_open_'+TODAY)!==true);renderToday();}
@@ -1770,8 +1719,8 @@ function markSet(id,i){
   d.marks[id]=d.marks[id]||{};
   d.marks[id][i]=!d.marks[id][i];
   saveDraft();
-  if(d.marks[id][i])startRest(id);
   renderSession();
+  if(d.marks[id][i])startRest(id);
 }
 /* ═══ GUIDED WORKOUT ═══
    One exercise at a time, big buttons, countdown and chime. */
@@ -1968,16 +1917,6 @@ function saveSession(){
   DB.del('draft_'+TODAY);SESS=null;stopRest();
   toast('Session logged');renderAll();
 }
-function skipSession(){
-  const log=DB.get('session_log')||[];
-  log.push({date:TODAY,type:sessionDraft().type,skipped:true,ts:Date.now()});
-  DB.set('session_log',log);DB.del('draft_'+TODAY);SESS=null;toast('Skipped');renderAll();
-}
-function logRest(){
-  const log=DB.get('session_log')||[];
-  log.push({date:TODAY,type:'rest',ts:Date.now()});
-  DB.set('session_log',log);toast('Rest day logged');renderAll();
-}
 function overrideRest(){
   DB.set('override_rest_'+TODAY,true);
   derive();renderToday();
@@ -1986,49 +1925,17 @@ function overrideRest(){
 /* ═══ 18. AEROBIC UI ═══ */
 let aeroMode='stepup',aeroLeft=0,aeroTimer=null,aeroRunning=false,ropeSet=1,ropePhase='work';
 let AERO_SLOT='blk-b';
+/* The timer card, for the blocks that need one: jog/walk, step-ups and
+   rope. A plain jog is a line on the action card; the watch times it. */
 function renderAerobic(slot){
   if(slot)AERO_SLOT=slot;
   const wrap=el(AERO_SLOT);
   if(!wrap)return;
-  const lead='<div class="sec" style="margin-top:'+(AERO_SLOT==='blk-a'?'6px':'22px')+'">Aerobic block</div>';
+  const P=S.plan||{};
+  const lead=P.do==='aerobic'?'':'<div class="sec" style="margin-top:10px">Aerobic block · optional</div>';
   const count=aeroThisWeek().length;
-  const done=aeroLog().some(e=>e.date===TODAY);
-
-  if(!isAeroDay()&&!done){
-    const P=S.plan||{};
-    const noWork=!(DB.get('health_workouts')||[]).length&&!!DB.get('health_uploaded');
-    const reason=(P.off||[]).filter(x=>/aerobic/i.test(x))[0]
-      ||(aeroYesterday()?'You did one yesterday \u2014 a day between blocks'
-        :count>=AERO_TARGET?'Both blocks done this week':'Not today');
-    wrap.innerHTML=lead+'<div class="card"><div class="row">'+
-      '<div style="flex:1"><div class="muted" style="color:var(--t3)">\u2715 '+h(reason)+'</div></div>'+
-      '<div class="muted" style="color:'+(count>=AERO_TARGET?'var(--green)':'var(--t3)')+'">'+count+' / '+AERO_TARGET+'</div></div>'+
-      (noWork?'<div class="muted" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);color:var(--yellow);line-height:1.6">'+
-        'This count may be wrong \u2014 your export carries no workouts, so rides and runs are invisible to the app. See Settings.</div>':'')+
-      aeroWeekList()+'</div>';
-    return;
-  }
-  if(done){
-    const e=aeroLog().filter(x=>x.date===TODAY).pop();
-    const m={name:modeName(e.mode)};
-    wrap.innerHTML=lead+'<div class="card" style="border-color:rgba(74,222,128,.25);background:var(--gd)">'+
-      '<div style="color:var(--green);font-size:13px">Done \u2713 '+h(m.name)+
-        (e.auto?' <span class="muted" style="font-size:9px">from your watch</span>':'')+'</div>'+
-      '<div class="muted" style="margin-top:4px">'+e.minutes+' min'+
-      (e.auto&&e.avg?' \u00B7 '+e.avg+' bpm avg'+(e.max?', '+e.max+' peak':''):'')+
-      ' \u00B7 '+count+' / '+AERO_TARGET+' this week'+
-      (e.pelvic?' \u00B7 <span style="color:var(--yellow)">flagged</span>':'')+'</div></div>';
-    return;
-  }
-  if((S.verdict.k==='rest'&&!S.verdict.soft)||S.verdict.k==='backoff'){
-    wrap.innerHTML=lead+'<div class="card">'+
-      '<div style="font-size:13px;margin-bottom:5px">Moved</div>'+
-      '<div class="muted">'+h(S.verdict.why[0])+'. Shift the block to tomorrow rather than dropping it.</div></div>';
-    return;
-  }
-
-  const locked=false;
-  const noIntervals=S.verdict.k==='deload'||S.verdict.k==='ease'||S.verdict.k==='stale';
+  const noIntervals=['deload','ease','stale','rest'].indexOf(S.verdict.k)>=0||P.do==='easy'||
+    (P.off||[]).some(x=>/No intervals/.test(x));
   if(noIntervals&&AERO_MODES[aeroMode].kind==='interval')aeroMode='stepup';
   if(feelHas('feet')&&['jog','jogwalk','rope'].indexOf(aeroMode)>=0)aeroMode='stepup';
   const M=AERO_MODES[aeroMode];
@@ -2036,58 +1943,47 @@ function renderAerobic(slot){
   const rope=ropeProtocol();
   const mins=aeroMinutes();
   const z=zoneFor(aeroMode);
-
   const sore=feelHas('feet');
   const btns=Object.entries(AERO_MODES).map(([k,m])=>{
-    const gated=m.gated&&locked;
     const impact=sore&&(m.kind==='jog'||m.kind==='jogwalk'||m.kind==='interval');
     const jogUsed=(m.kind==='jog'||m.kind==='jogwalk')&&jogThisWeek()>=Math.max(1,AERO_TARGET-1);
-    const dis=gated||(noIntervals&&m.kind==='interval')||jogUsed||impact;
+    const dis=(noIntervals&&m.kind==='interval')||jogUsed||impact;
     return '<button class="'+(k===aeroMode?'on':'')+'"'+(dis?' disabled':'')+
-      ' onclick="'+(dis?(impact?'toast(\'Sore feet \u2014 no impact work today\')':jogUsed?'toast(\'Jog quota used this week\')':'toast(\'No intervals on an easy week\')'):'setAero(\''+k+'\')')+
-      '">'+m.name+(gated?' \u{1F512}':'')+'</button>';
+      ' onclick="'+(dis?(impact?'toast(\'Sore feet — no impact work today\')':jogUsed?'toast(\'Jog quota used this week\')':'toast(\'No intervals today\')'):'setAero(\''+k+'\')')+
+      '">'+m.name+'</button>';
   }).join('');
-
   const jog=jogProtocol();
-  const target=aeroMode==='rope'?rope.sets+' \u00D7 '+(rope.work>=60?(rope.work/60)+' min':rope.work+'s')+' \u00B7 '+rope.rest+'s rest'
-    :aeroMode==='jogwalk'?jog.rounds+' rounds \u00B7 2 min walk, 1 min jog'
+  const target=aeroMode==='rope'?rope.sets+' × '+(rope.work>=60?(rope.work/60)+' min':rope.work+'s')+' · '+rope.rest+'s rest'
+    :aeroMode==='jogwalk'?jog.rounds+' rounds · 2 min walk, 1 min jog'
     :aeroMode==='jog'?jogMinutes()+' min continuous'
     :mins+' min continuous';
-
   wrap.innerHTML=lead+
-    (aeroUrgent()?'<div class="note" style="border-color:rgba(251,191,36,.25);background:var(--yd)"><b style="color:var(--yellow)">'+
-      (AERO_TARGET-count)+' block'+((AERO_TARGET-count)===1?'':'s')+' left, '+daysLeftInWeek()+' day'+(daysLeftInWeek()===1?'':'s')+' to go</b>'+
-      '<span class="muted">Good day for it \u2014 the week does not carry over.</span></div>':'')+
     '<div class="card">'+
     '<div class="modes" style="flex-wrap:wrap">'+btns+'</div>'+
     '<div class="row" style="align-items:flex-start;margin-bottom:11px">'+
       '<div><div style="font-size:14px">'+M.name+'</div>'+
       '<div class="muted" style="margin-top:3px">'+M.sub+'</div></div>'+
       '<div style="text-align:right"><div class="muted" style="color:var(--t2)">'+target+'</div>'+
-      '<div class="muted" style="margin-top:3px">week '+aeroWeek()+' \u00B7 '+count+'/'+AERO_TARGET+'</div></div></div>'+
+      '<div class="muted" style="margin-top:3px">'+count+'/'+AERO_TARGET+' this week</div></div></div>'+
     '<div style="background:var(--bg3);border-radius:8px;padding:9px;text-align:center;font-size:11px;color:var(--t2);margin-bottom:11px">'+
-      'Target HR '+z[0]+'\u2013'+z[1]+' bpm'+(isInterval?' at the top':'')+'</div>'+
-    (S.verdict.k==='ease'?'<div class="note" style="margin:0 0 11px;border-color:rgba(251,191,36,.25);background:var(--yd);color:var(--yellow);text-align:center;font-size:10px">Eased day \u2014 keep it moderate, skip the intervals</div>':'')+
-    (S.verdict.k==='deload'?'<div class="note" style="margin:0 0 11px;border-color:rgba(125,166,240,.28);background:rgba(125,166,240,.08);color:var(--blue);text-align:center;font-size:10px">Deload week \u2014 moderate only, ceiling 148 bpm</div>':'')+
-    '<div class="muted" style="margin-bottom:12px">'+M.cue+'</div>'+
+      'Target HR '+z[0]+'–'+z[1]+' bpm'+(isInterval?' at the top':'')+'</div>'+
+    '<div class="muted" style="margin-bottom:12px">'+M.cue+
+      (aeroMode==='stepup'?' Keep step-ups to once a week while your feet are sore.':'')+
+      (aeroMode==='jog'?' '+h(jogPlan().why)+'.':'')+
+      (aeroMode==='jogwalk'?' Once a week.':'')+'</div>'+
     (aeroMode==='rope'?'<div class="note" style="margin:0 0 12px;border-color:var(--line);background:var(--bg3)">'+
-      '<b style="font-weight:400">Step '+rope.step+' of '+rope.steps+' \u00B7 '+rope.left+' more session'+(rope.left===1?'':'s')+' here</b>'+
-      '<span class="muted">'+h(rope.note)+' Two to three rope sessions a week, never on consecutive days \u2014 calves and achilles need 48 hours.</span></div>'+
-      (ropeThisWeek()>=3?'<div class="note" style="margin:0 0 12px;border-color:rgba(251,191,36,.25);background:var(--yd)"><span class="muted">Third rope session this week \u2014 make the next one something else.</span></div>':'')+
-      '<div class="note" style="margin:0 0 12px;border-color:rgba(248,113,113,.2);background:var(--rd)"><b style="color:var(--red);font-size:9px;letter-spacing:.1em;text-transform:uppercase">Stop on</b><span class="muted">'+ROPE_STOP.map(x=>'\u00B7 '+x).join('<br>')+'</span></div>':'')+
-    (aeroMode==='stepup'?'<div class="note" style="margin:0 0 12px;border-color:rgba(251,191,36,.25);background:var(--yd)"><span class="muted">Backup option. Keep it to once a week while your feet are sore \u2014 the descent is what loads the plantar fascia.</span></div>':'')+
-    ((aeroMode==='jog'||aeroMode==='jogwalk')?'<div class="note" style="margin:0 0 12px;border-color:rgba(251,191,36,.25);background:var(--yd)"><b style="color:var(--yellow)">'+
-      (aeroMode==='jog'?(jogHeldFor()?'Holding at '+jogMinutes()+' min for '+jogHeldFor()+' more session'+(jogHeldFor()===1?'':'s'):'Next step: +10% a week, now '+jogMinutes()+' min'):'Once a week')+
-      '</b><span class="muted">Tissue adapts slower than the session feels. The reading that matters is your arch on the first steps out of bed tomorrow \u2014 pain there means stop.</span></div>':'')+
+      '<b style="font-weight:400">Step '+rope.step+' of '+rope.steps+' · '+rope.left+' more session'+(rope.left===1?'':'s')+' here</b>'+
+      '<span class="muted">'+h(rope.note)+' Two to three rope sessions a week, never on consecutive days — calves and achilles need 48 hours.</span></div>'+
+      (ropeThisWeek()>=3?'<div class="note" style="margin:0 0 12px;border-color:rgba(251,191,36,.25);background:var(--yd)"><span class="muted">Third rope session this week — make the next one something else.</span></div>':'')+
+      '<div class="note" style="margin:0 0 12px;border-color:rgba(248,113,113,.2);background:var(--rd)"><b style="color:var(--red);font-size:9px;letter-spacing:.1em;text-transform:uppercase">Stop on</b><span class="muted">'+ROPE_STOP.map(x=>'· '+x).join('<br>')+'</span></div>':'')+
     '<div class="clock" id="ae-clock">'+fmt(aeroMode==='rope'?rope.work:aeroMode==='jogwalk'?jog.walk:
        aeroMode==='jog'?jogMinutes()*60:mins*60)+'</div>'+
     '<div class="muted" style="text-align:center;margin-bottom:12px" id="ae-sub">'+
       (aeroMode==='rope'?'set 1 of '+rope.sets:
-       aeroMode==='jogwalk'?'walk \u00B7 round 1 of '+jog.rounds:'ready')+'</div>'+
+       aeroMode==='jogwalk'?'walk · round 1 of '+jog.rounds:'ready')+'</div>'+
     '<div style="display:flex;gap:8px"><button class="btn btn-go" style="width:auto;flex:2;margin:0" id="ae-btn" onclick="aeroToggle()">Start</button>'+
     '<button class="btn" style="width:auto;flex:1;margin:0" onclick="aeroReset()">Reset</button></div>'+
-    '<button class="btn" style="width:100%;margin:8px 0 0" onclick="aeroSave()">Log block \u2713</button>'+
-''+
+    '<button class="btn" style="width:100%;margin:8px 0 0" onclick="aeroSave()">Log block ✓</button>'+
     '</div>';
 }
 function aeroDone(){
@@ -2173,282 +2069,40 @@ function aeroSave(){
     '<button class="btn" style="width:auto;flex:1;margin:0;background:var(--yd);border-color:rgba(251,191,36,.35);color:var(--yellow)" onclick="aeroConfirm(true,'+mins+')">Yes</button></div></div>');
 }
 function aeroConfirm(pelvic,mins){
-  const l=aeroLog();
+  const l=manualAeroLog();
   l.push({date:TODAY,mode:aeroMode,minutes:mins,week:aeroWeek(),hrv:S.hrv||null,pelvic:!!pelvic,ts:Date.now()});
   DB.set('aero_log',l);
   if(!DB.get('aero_start'))DB.set('aero_start',TODAY);
-  closeSheet();aeroReset();renderAll();
+  closeSheet();aeroReset();aeroMode='stepup';renderAll();
   toast(pelvic?'Logged — symptoms noted':'Aerobic block logged');
 }
 
-/* ═══ 19. DAILY LOG ═══ */
-function bpDue(){
-  const last=(DB.get('bp_log')||[]).map(r=>r.date).sort().pop();
-  if(!last)return true;
-  return daysBetween(last,TODAY)>=3;   // twice a week
-}
-function renderLog(){
-  const wt=(DB.get('weight_log')||[]).filter(r=>r.date===TODAY)[0];
-  const bp=(DB.get('bp_log')||[]).filter(r=>r.date===TODAY)[0];
-  const showBp=bpDue()||!!bp;
-  el('t-log').innerHTML='<div class="card">'+
-    '<div class="muted" style="margin-bottom:8px">Weight'+(wt?' \u00B7 logged '+wt.kg+' kg':'')+'</div>'+
-    '<div class="inline"><input type="number" step="0.1" id="in-weight" placeholder="kg" inputmode="decimal"><button onclick="logWeight()">Save</button></div>'+
-    (showBp?
-      '<div class="muted" style="margin:14px 0 8px">Blood pressure'+(bp?' \u00B7 logged '+bp.sys+'/'+bp.dia:' \u00B7 due')+'</div>'+
-      '<div class="inline"><input type="number" id="in-sys" placeholder="sys" inputmode="numeric"><input type="number" id="in-dia" placeholder="dia" inputmode="numeric"><button onclick="logBp()">Save</button></div>'
-      :'')+
-    '</div>';
-}
-function setMaintenance(){
-  DB.set('maintenance_plan_'+weekStart(),true);
-  DB.set('manual_session_type_'+TODAY,'legs');
-  SESS=null;DB.del('draft_'+TODAY);
-  renderAll();toast('One full session this week is enough');
-}
-function dismissMaintenance(){
-  DB.set('maintenance_off_'+weekStart(),true);renderAll();
-}
+/* ═══ 19. MEASUREMENTS ═══ */
 function logWeight(){
   const v=parseFloat(el('in-weight').value);
   if(!v||v<35||v>250)return toast('Enter a weight in kg');
   const l=(DB.get('weight_log')||[]).filter(r=>r.date!==TODAY);
   l.push({date:TODAY,kg:v});l.sort((a,b)=>a.date.localeCompare(b.date));
-  DB.set('weight_log',l);toast('Weight saved');renderAll();
+  DB.set('weight_log',l);closeSheet();toast('Weight saved');renderAll();
 }
 function logBp(){
   const s=parseInt(el('in-sys').value),d=parseInt(el('in-dia').value);
   if(!s||!d||s<70||s>250||d<40||d>150)return toast('Enter both values');
   const l=(DB.get('bp_log')||[]).filter(r=>r.date!==TODAY);
   l.push({date:TODAY,sys:s,dia:d});l.sort((a,b)=>a.date.localeCompare(b.date));
-  DB.set('bp_log',l);toast('Blood pressure saved');renderAll();
+  DB.set('bp_log',l);closeSheet();toast('Blood pressure saved');renderAll();
 }
-/* ═══ 20. PROGRESS ═══ */
-let progTab='health';
-function setProgTab(t){progTab=t;['health','body'].forEach(x=>el('pt-'+x).classList.toggle('on',x===t));renderProgress();}
-/* One chart for the whole arc. Each line is indexed to 100 at the start of
-   the window and flipped where lower is better, so "up" always means
-   "improving" - no mental translation per metric. */
-function smooth(ser,win){
-  const out=[];
-  for(let i=0;i<ser.length;i++){
-    const from=Math.max(0,i-win+1);
-    const v=ser.slice(from,i+1).map(e=>e[1]).filter(x=>x>0);
-    if(v.length)out.push([ser[i][0],v.reduce((a,b)=>a+b,0)/v.length]);
-  }
-  return out;
-}
-function journeyLines(days){
-  const defs=[
-    {label:'VO2max',col:'#4ADE80',ser:metricSeries('vo2_max',days+40),inv:false,win:7},
-    {label:'HRV',col:'#7DA6F0',ser:metricSeries('heart_rate_variability',days+40),inv:false,win:14},
-    {label:'Resting HR',col:'#B49BE8',ser:metricSeries('resting_heart_rate',days+40),inv:true,win:14},
-    {label:'Weight',col:'#5FD9C8',ser:(DB.get('weight_log')||[]).map(r=>[r.date,r.kg]).sort((a,b)=>a[0].localeCompare(b[0])),inv:true,win:3}
-  ];
-  const from=addDays(TODAY,-days+1);
-  return defs.map(d=>{
-    const sm=smooth(d.ser,d.win).filter(e=>e[0]>=from);
-    if(sm.length<3)return null;
-    const base=sm[0][1];if(!base)return null;
-    const lastRaw=sm[sm.length-1][1];
-    return {label:d.label,col:d.col,baseRaw:base,lastRaw:lastRaw,from:sm[0][0],
-      pts:sm.map(e=>[e[0], d.inv?(2-e[1]/base)*100:(e[1]/base)*100]),
-      pct:+(((d.inv?base/lastRaw:lastRaw/base)-1)*100).toFixed(1)};
-  }).filter(Boolean);
-}
-let jFocus=null;
-function focusLine(lbl){
-  jFocus=(jFocus===lbl)?null:lbl;
-  const days=progRange<90?90:progRange;
-  const all=journeyLines(days);
-  drawJourney('c-journey',jFocus?all.filter(l=>l.label===jFocus):all,days);
-  [...document.querySelectorAll('[data-jl]')].forEach(n=>{
-    n.style.opacity=(!jFocus||n.getAttribute('data-jl')===jFocus)?'1':'.3';});
-  const h2=el('j-hint');
-  if(h2)h2.textContent=jFocus?'Showing '+jFocus+' only \u2014 tap it again for all four.':'Tap a line in the key to see it on its own.';
-}
-function journeyChart(days){
-  const lines=journeyLines(days);
-  if(!lines.length)return '<div class="card"><div class="muted">Not enough history yet.</div></div>';
-  const vo2=lines.filter(l=>l.label==='VO2max')[0];
-  jFocus=null;
-  setTimeout(()=>{drawJourney('c-journey',lines,days);drawBars('c-bars',days);},0);
-  return '<div class="card" style="padding:14px 12px 12px">'+
-    '<canvas id="c-journey" style="height:210px"></canvas>'+
-    '<canvas id="c-bars" style="height:62px;margin-top:2px"></canvas>'+
-    '<div style="display:flex;flex-wrap:wrap;gap:9px;margin-top:10px">'+
-      lines.map(l=>'<div data-jl="'+h(l.label)+'" onclick="focusLine(\''+h(l.label)+'\')" '+
-        'style="display:flex;align-items:center;gap:5px;cursor:pointer">'+
-        '<span style="width:10px;height:3px;background:'+l.col+';display:inline-block;border-radius:2px"></span>'+
-        '<span class="muted" style="font-size:10px">'+l.label+' <span style="color:'+(l.pct>0.5?'var(--green)':l.pct<-0.5?'var(--red)':'var(--t3)')+'">'+
-        (l.pct>0?'+':'')+l.pct+'%</span></span></div>').join('')+
-      '<div style="display:flex;align-items:center;gap:5px">'+
-        '<span style="width:10px;height:7px;background:#7DA6F0;opacity:.55;display:inline-block;border-radius:2px"></span>'+
-        '<span class="muted" style="font-size:10px">aerobic min / week</span></div>'+
-    '</div>'+
-    '<div class="muted" id="j-hint" style="margin-top:9px;color:var(--t2)">Tap a line in the key to see it on its own.</div>'+
-    '<div class="muted" style="margin-top:5px;line-height:1.6">Indexed to 100 at the start, and flipped where lower is better \u2014 so a rising weight line means kilos lost. Colours only tell the lines apart; up is good for all of them. The bars underneath share the same weeks.'+
-      (vo2?' The dashed green line is VO2max 40.':'')+'</div>'+
-  '</div>';
-}
-function jgeom(w,h,days){
-  const L=30,R=8,T=10,B=18;
-  return {L,R,T,B,W:w-L-R,H:h-T-B,
-    t0:new Date(addDays(TODAY,-days+1)).getTime(),t1:new Date(TODAY).getTime()};
-}
-function drawJourney(id,lines,days){
-  const c=el(id);if(!c||!c.parentElement)return;
-  const w=c.parentElement.offsetWidth;if(!w||w<20){setTimeout(()=>drawJourney(id,lines,days),300);return;}
-  const dpr=window.devicePixelRatio||1,h=210;
-  c.width=w*dpr;c.height=h*dpr;
-  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
-  const g=jgeom(w,h,days);
-  const all=[];lines.forEach(l=>l.pts.forEach(p=>all.push(p[1])));
-  // keep the VO2max goal inside the frame
-  const vo2=lines.filter(l=>l.label==='VO2max')[0];
-  let goalIdx=null;
-  if(vo2&&vo2.baseRaw){goalIdx=(40/vo2.baseRaw)*100;all.push(goalIdx);}
-  let mn=Math.min.apply(null,all),mx=Math.max.apply(null,all);
-  const pad=Math.max(2,(mx-mn)*0.12);mn-=pad;mx+=pad;
-  const X=d=>g.L+((new Date(d).getTime()-g.t0)/Math.max(1,g.t1-g.t0))*g.W;
-  const Y=v=>g.T+g.H-((v-mn)/Math.max(0.001,mx-mn))*g.H;
-
-  // horizontal grid, labelled as percent from the start
-  x.font='9px "DM Mono",monospace';
-  const step=(mx-mn)>60?20:(mx-mn)>30?10:5;
-  for(let v=Math.ceil(mn/step)*step;v<=mx;v+=step){
-    const yy=Y(v);
-    x.strokeStyle=v===100?'#33333A':'#1C1C1F';x.lineWidth=1;
-    x.setLineDash(v===100?[3,3]:[]);
-    x.beginPath();x.moveTo(g.L,yy);x.lineTo(g.L+g.W,yy);x.stroke();x.setLineDash([]);
-    x.fillStyle=v===100?'#9A9AA5':'#5E5E68';x.textAlign='right';
-    x.fillText((v>100?'+':'')+(v-100)+'%',g.L-5,yy+3);
-  }
-  // month ticks
-  x.textAlign='center';x.fillStyle='#5E5E68';
-  const seen={};
-  for(let k=days-1;k>=0;k--){
-    const d=addDays(TODAY,-k),m=d.slice(0,7);
-    if(seen[m])continue;seen[m]=1;
-    const xx=X(d);if(xx<g.L+12||xx>g.L+g.W-6)continue;
-    x.strokeStyle='#1C1C1F';x.beginPath();x.moveTo(xx,g.T);x.lineTo(xx,g.T+g.H);x.stroke();
-    x.fillText(['','jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'][+m.slice(5)],xx,h-5);
-  }
-  // VO2max goal
-  if(goalIdx!==null){
-    x.strokeStyle='#4ADE80';x.globalAlpha=.45;x.setLineDash([4,4]);x.lineWidth=1;
-    x.beginPath();x.moveTo(g.L,Y(goalIdx));x.lineTo(g.L+g.W,Y(goalIdx));x.stroke();
-    x.setLineDash([]);x.globalAlpha=1;
-    x.fillStyle='#4ADE80';x.textAlign='left';x.globalAlpha=.7;
-    x.fillText('VO2max 40',g.L+g.W-46,Y(goalIdx)-5);x.globalAlpha=1;
-  }
-  lines.forEach(l=>{
-    if(l.label==='VO2max'){            // the goal metric gets a filled area
-      x.beginPath();x.moveTo(X(l.pts[0][0]),Y(l.pts[0][1]));
-      l.pts.forEach(p=>x.lineTo(X(p[0]),Y(p[1])));
-      x.lineTo(X(l.pts[l.pts.length-1][0]),g.T+g.H);x.lineTo(X(l.pts[0][0]),g.T+g.H);x.closePath();
-      const gr=x.createLinearGradient(0,g.T,0,g.T+g.H);
-      gr.addColorStop(0,'rgba(74,222,128,.18)');gr.addColorStop(1,'rgba(74,222,128,0)');
-      x.fillStyle=gr;x.fill();
-    }
-    x.beginPath();
-    l.pts.forEach((p,i)=>i?x.lineTo(X(p[0]),Y(p[1])):x.moveTo(X(p[0]),Y(p[1])));
-    x.strokeStyle=l.col;x.lineWidth=l.label==='VO2max'?2.6:1.8;x.lineJoin='round';x.stroke();
-    const last=l.pts[l.pts.length-1];
-    x.beginPath();x.arc(X(last[0]),Y(last[1]),3,0,7);x.fillStyle=l.col;x.fill();
-  });
-}
-/* Bars share the arc's x-axis, so cause sits under effect. */
-function drawBars(id,days){
-  const c=el(id);if(!c||!c.parentElement)return;
-  const w=c.parentElement.offsetWidth;if(!w||w<20){setTimeout(()=>drawBars(id,days),300);return;}
-  const dpr=window.devicePixelRatio||1,h=62;
-  c.width=w*dpr;c.height=h*dpr;
-  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
-  const g=jgeom(w,h,days);
-  const weeks=Math.ceil(days/7)+1, bars=trainingBars(weeks);
-  const max=Math.max(30,...bars.map(v=>v.mins));
-  const bw=Math.max(4,(g.W/weeks)-3);
-  const X=d=>g.L+((new Date(d).getTime()-g.t0)/Math.max(1,g.t1-g.t0))*g.W;
-  x.font='9px "DM Mono",monospace';x.textAlign='right';x.fillStyle='#5E5E68';
-  x.fillText('min',g.L-5,14);
-  bars.forEach(v=>{
-    const xx=X(v.start);if(xx<g.L-bw||xx>g.L+g.W)return;
-    const hh=Math.round(v.mins/max*34);
-    x.fillStyle='#7DA6F0';x.globalAlpha=v.mins?.55:.12;
-    x.fillRect(xx,40-hh,bw,Math.max(2,hh));x.globalAlpha=1;
-    for(let i=0;i<3;i++){
-      x.fillStyle=i<v.str?'#4ADE80':'#232327';
-      x.beginPath();x.arc(xx+bw/2,48+i*5,1.8,0,7);x.fill();
-    }
-  });
-  x.fillStyle='#5E5E68';x.textAlign='right';x.fillText('sess',g.L-5,54);
-}
-/* The training that produced it. */
-function trainingBars(weeks){
-  const out=[];
-  for(let i=weeks-1;i>=0;i--){
-    const start=addDays(weekStart(),-7*i), end=addDays(start,6);
-    const aer=aeroLog().filter(a=>a.date>=start&&a.date<=end);
-    const str=sessions().filter(v=>v.date>=start&&v.date<=end&&!v.skipped&&['push','pull','legs'].indexOf(v.type)!==-1).length;
-    out.push({start,mins:aer.reduce((a,b)=>a+(b.minutes||0),0),str,blocks:aer.length});
-  }
-  return out;
-}
-function trainingCard(){
-  const b=trainingBars(10);
-  if(!b.some(v=>v.mins||v.str))return '';
-  const max=Math.max(30,...b.map(v=>v.mins));
-  return '<div class="card" style="padding:14px">'+
-    '<div style="display:flex;align-items:flex-end;gap:4px;height:78px">'+
-      b.map(v=>'<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">'+
-        '<div style="height:'+Math.round(v.mins/max*60)+'px;background:#7DA6F0;border-radius:3px 3px 0 0;opacity:'+(v.mins?0.85:0.15)+'"></div>'+
-        '<div style="display:flex;gap:2px;margin-top:4px;justify-content:center">'+
-          [0,1,2].map(i=>'<span style="width:4px;height:4px;border-radius:50%;background:'+(i<v.str?'#4ADE80':'#232327')+'"></span>').join('')+
-        '</div></div>').join('')+
-    '</div>'+
-    '<div class="row" style="margin-top:8px"><span class="muted" style="font-size:9px">10 weeks ago</span>'+
-    '<span class="muted" style="font-size:9px">this week</span></div>'+
-    '<div class="muted" style="margin-top:8px;line-height:1.6">Bars are aerobic minutes a week, dots are strength sessions. This is the input; the chart above is the result.</div>'+
-  '</div>';
-}
-
-let progRange=90;
+/* ═══ 20. PROGRESS ═══
+   One question: which way am I going. Six tiles answer it at a glance,
+   each against the same four weeks; a tap opens the chart. Then the two
+   things he trains: runs and strength. */
+let progRange=90,progOpen=null,strAll=false;
 function setRange(n){progRange=n;renderProgress();}
 function rangeBar(){
   return '<div class="tabs" style="margin:0 16px 12px">'+
-    [[30,'30 days'],[90,'3 months'],[365,'All']].map(([n,l])=>
+    [[30,'30 days'],[90,'3 months'],[120,'All']].map(([n,l])=>
       '<button class="'+(progRange===n?'on':'')+'" onclick="setRange('+n+')">'+l+'</button>').join('')+'</div>';
 }
-function monthlyTable(){
-  const m={};
-  const add=(key,name,dec)=>{
-    metricSeries(name,400).forEach(([d,v])=>{
-      const k=d.slice(0,7);
-      (m[k]=m[k]||{})[key]=(m[k][key]||[]).concat(v);
-    });
-  };
-  add('hrv','heart_rate_variability');add('rhr','resting_heart_rate');add('vo2','vo2_max');
-  (DB.get('weight_log')||[]).forEach(r=>{const k=r.date.slice(0,7);(m[k]=m[k]||{});(m[k].wt=m[k].wt||[]).push(r.kg);});
-  const keys=Object.keys(m).sort().slice(-8);
-  if(keys.length<2)return '<div class="card"><div class="muted">Long-term view builds up as months pass.</div></div>';
-  const cell=(a,dec)=>a&&a.length?mean(a).toFixed(dec):'\u2013';
-  return '<div class="card" style="padding:12px 14px">'+
-    '<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)">'+
-      '<span class="muted" style="flex:1.2">Month</span><span class="muted" style="flex:1;text-align:right">HRV</span>'+
-      '<span class="muted" style="flex:1;text-align:right">Rest HR</span><span class="muted" style="flex:1;text-align:right">VO2</span>'+
-      '<span class="muted" style="flex:1;text-align:right">Weight</span></div>'+
-    keys.map(k=>'<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)">'+
-      '<span style="flex:1.2;font-size:11px">'+k+'</span>'+
-      '<span style="flex:1;text-align:right;font-size:11px">'+cell(m[k].hrv,1)+'</span>'+
-      '<span style="flex:1;text-align:right;font-size:11px">'+cell(m[k].rhr,0)+'</span>'+
-      '<span style="flex:1;text-align:right;font-size:11px">'+cell(m[k].vo2,1)+'</span>'+
-      '<span style="flex:1;text-align:right;font-size:11px">'+cell(m[k].wt,1)+'</span></div>').join('')+
-    '</div>';
-}
-/* Four tiles answer "which way am I going" in one glance;
-   the full chart is one tap away instead of always on screen. */
-let progOpen=null;
 /* A single morning against a single morning four weeks ago is noise.
    Compare the 7-day mean with the 7-day mean that ended back then. */
 function trend28(name,ser){
@@ -2459,26 +2113,31 @@ function trend28(name,ser){
   if(!now||!then)return null;
   return +(now-then).toFixed(2);
 }
-function tile(key,label,cur,unit,delta,better,dec){
-  const open=progOpen===key;
-  let col='var(--t2)',arrow=AR_R;
-  if(delta!==null&&Math.abs(delta)>=(dec?0.3:0.5)){
-    const good=better==='down'?delta<0:delta>0;
-    col=good?'var(--green)':'var(--red)';
-    arrow=delta>0?'\u2191':'\u2193';
+const EM_D='—';
+function tile(o){
+  const open=progOpen===o.key;
+  let col='var(--t3)',arrow='';
+  const has=o.d!==null&&o.d!==undefined;
+  if(has){
+    arrow='→';col='var(--t2)';
+    if(Math.abs(o.d)>=o.thr){
+      const good=o.better==='down'?o.d<0:o.d>0;
+      col=good?'var(--green)':'var(--red)';
+      arrow=o.d>0?'↑':'↓';
+    }
   }
-  return '<div onclick="toggleMetric(\''+key+'\')" style="cursor:pointer;background:var(--bg2);border:1px solid '+
+  const dt=!has?'':' '+(o.d>0?'+':'')+(o.fmt?o.fmt(o.d):o.d.toFixed(o.dec));
+  return '<div onclick="toggleMetric(\''+o.key+'\')" style="cursor:pointer;background:var(--bg2);border:1px solid '+
     (open?'var(--line2)':'var(--line)')+';border-radius:12px;padding:12px 13px">'+
-    '<div class="muted" style="font-size:9px;letter-spacing:.1em;text-transform:uppercase">'+label+'</div>'+
+    '<div class="muted" style="font-size:9px;letter-spacing:.1em;text-transform:uppercase">'+o.label+'</div>'+
     '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:5px">'+
-      '<span style="font-family:\'Instrument Serif\',serif;font-size:23px">'+(cur?cur.toFixed(dec):EM_D)+
-      '<span style="font-size:10px;color:var(--t3)"> '+unit+'</span></span>'+
-      '<span style="color:'+col+';font-size:11px">'+arrow+(delta===null?'':' '+(delta>0?'+':'')+delta.toFixed(dec||1))+'</span>'+
-    '</div><div class="muted" style="font-size:9px;margin-top:3px">vs 4 weeks ago</div></div>';
+      '<span style="font-family:\'Instrument Serif\',serif;font-size:23px">'+(o.val||EM_D)+
+      (o.unit?'<span style="font-size:10px;color:var(--t3)"> '+o.unit+'</span>':'')+'</span>'+
+      '<span style="color:'+col+';font-size:11px">'+arrow+dt+'</span>'+
+    '</div><div class="muted" style="font-size:9px;margin-top:3px'+(o.warn?';color:var(--yellow)':'')+'">'+(o.sub||'vs 4 weeks ago')+'</div></div>';
 }
-const AR_R='\u2192', EM_D='\u2014';
 function toggleMetric(k){progOpen=progOpen===k?null:k;renderProgress();}
-function metricCard(name,cur,unit,data,better,dec){
+function metricCard(name,cur,unit,data,better,dec,noteText){
   if(!data.length)return '<div class="metric"><div class="m-name">'+name+'</div><div class="muted" style="margin-top:6px">No data yet</div></div>';
   const first=data[0],diff=cur-first;
   const good=better==='down'?diff<0:diff>0;
@@ -2497,245 +2156,113 @@ function metricCard(name,cur,unit,data,better,dec){
       '<span class="muted">low '+mn.toFixed(dec||0)+'</span>'+
       '<span class="muted">high '+mx.toFixed(dec||0)+'</span>'+
       '<span class="muted">2nd half '+(trend>0?'+':'')+trend.toFixed(1)+'</span></div>'+
+    (noteText?'<div class="muted" style="margin-top:8px;line-height:1.6">'+noteText+'</div>':'')+
     '</div>';
 }
+function runRow(r){
+  const f=runFlags(r);
+  const main=r.cont?r.cont+' min'+(r.sKmh?' · '+r.sKmh.toFixed(1)+' km/h'+(r.sHr?' · '+r.sHr+' bpm':''):'')
+    :Math.round(r.min)+' min total'+(r.avg?' · '+r.avg+' bpm avg':'');
+  return '<div class="rrow"><div><div style="font-size:12px">'+shortDate(r.date)+'</div>'+
+    '<div class="muted" style="font-size:9px;margin-top:2px">'+r.km.toFixed(2)+' km in '+Math.round(r.min)+' min'+
+      (f.length?' · '+f.join(', '):'')+'</div></div>'+
+    '<div style="text-align:right;font-size:11px;color:'+(f.length||!r.cont?'var(--t3)':'var(--t1)')+'">'+main+'</div></div>';
+}
+function runsCard(){
+  const all=runList();
+  if(!all.length)return '<div class="card"><div class="muted" style="line-height:1.6">No runs yet. They arrive with the weekly file import — the daily paste does not carry workouts.</div></div>';
+  const det=all.filter(r=>r.cont).slice(-8);
+  const bare=all.filter(r=>!r.cont).length;
+  const clean=det.filter(r=>!runFlags(r).length&&r.sKmh).pop();
+  if(det.length>=2)setTimeout(()=>drawRuns('c-runs',det),0);
+  return '<div class="card" style="padding:14px 14px 6px">'+
+    (clean?'<div class="row" style="align-items:baseline;margin-bottom:10px"><div><span style="font-family:\'Instrument Serif\',serif;font-size:28px">'+clean.sKmh.toFixed(1)+
+        '</span><span class="muted"> km/h at </span><span style="font-family:\'Instrument Serif\',serif;font-size:28px">'+clean.sHr+'</span><span class="muted"> bpm</span></div>'+
+      '<div class="muted">'+shortDate(clean.date)+'</div></div>':'')+
+    (det.length>=2?'<canvas id="c-runs" style="height:150px"></canvas>'+
+      '<div class="muted" style="margin:8px 0 6px;line-height:1.6">Bar: minutes run without a break. Under it: heart rate in minutes 6–15. Grey: hilly route or low-HRV morning, so not comparable.</div>':'')+
+    all.slice(-8).reverse().map(runRow).join('')+
+    (bare?'<div class="muted" style="padding:9px 0 6px;line-height:1.6">'+bare+' earlier run'+(bare===1?' has':'s have')+
+      ' totals only. One file export that covers those dates fills in the detail.</div>':'<div style="height:6px"></div>')+
+  '</div>';
+}
+function drawRuns(id,det){
+  const c=el(id);if(!c||!c.parentElement)return;
+  const w=c.parentElement.offsetWidth-28;if(!w||w<20){setTimeout(()=>drawRuns(id,det),300);return;}
+  const dpr=window.devicePixelRatio||1,hh=150;
+  c.style.width=w+'px';c.width=w*dpr;c.height=hh*dpr;
+  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,hh);
+  const T=18,B=34,H=hh-T-B,n=det.length;
+  const max=Math.max(20,...det.map(r=>r.cont));
+  const slot=w/n,bw=Math.min(46,slot-10);
+  x.font='10px "DM Mono",monospace';x.textAlign='center';
+  det.forEach((r,i)=>{
+    const cx=slot*i+slot/2,bh=Math.max(3,Math.round(r.cont/max*H));
+    const clean=!runFlags(r).length;
+    x.fillStyle=clean?'#7DA6F0':'#33333A';x.globalAlpha=clean?.85:1;
+    x.fillRect(cx-bw/2,T+H-bh,bw,bh);x.globalAlpha=1;
+    x.fillStyle=clean?'#EDEDF0':'#9A9AA5';x.fillText(r.cont+' min',cx,T+H-bh-5);
+    x.fillStyle=clean?'#9A9AA5':'#5E5E68';x.fillText(r.sHr?r.sHr+' bpm':EM_D,cx,hh-19);
+    x.fillStyle='#5E5E68';x.fillText((+r.date.slice(8))+' '+MON[+r.date.slice(5,7)-1],cx,hh-5);
+  });
+}
+function toggleStr(){strAll=!strAll;renderProgress();}
 function renderProgress(){
-  const b=el('p-body');
-  if(progTab==='health'){
-    const R=progRange;
-    const M={
-      hrv:{label:'HRV',cur:S.hrv7,unit:'ms',d:trend28('heart_rate_variability'),better:'up',dec:1,
-        data:vals('heart_rate_variability',R),name:'HRV'},
-      rhr:{label:'Resting HR',cur:mean(S.rhrV.slice(-7)),unit:'bpm',d:trend28('resting_heart_rate'),better:'down',dec:0,
-        data:vals('resting_heart_rate',R),name:'Resting HR'},
-      vo2:{label:'VO2max',cur:S.vo2,unit:'',d:trend28('vo2_max'),better:'up',dec:1,
-        data:vals('vo2_max',R),name:'VO2max'},
-      sleep:{label:'Sleep',cur:mean(sleepRecords().slice(-7).map(x=>x.totalSleep||0)),unit:'h',d:trend28('',sleepSeries()),better:'up',dec:1,
-        data:sleepRecords().slice(-R).map(x=>x.totalSleep||0).filter(x=>x>0),name:'Sleep'}
-    };
-    /* Two windows used to sit on this screen with opposite conclusions:
-       a four-week headline above a chart drawn from the start of the
-       range. Both were right; neither said which window it meant. */
-    const moving=Object.values(M).filter(m=>m.d!==null&&Math.abs(m.d)>=(m.dec?0.3:0.5));
-    const wrong=moving.filter(m=>m.better==='down'?m.d>0:m.d<0);
-    const names=a=>a.length===1?a[0].label:a.slice(0,-1).map(m=>m.label).join(', ')+' and '+a[a.length-1].label;
-    const near=!moving.length?'Nothing has moved much in the last four weeks.'
-      :wrong.length===0?'Last four weeks: everything that moved went the right way.'
-      :'Last four weeks: '+names(wrong)+(wrong.length===1?' went':' went')+' the wrong way.';
-    const jl=journeyLines(progRange<90?90:progRange);
-    const up=jl.filter(l=>l.pct>0.5), down=jl.filter(l=>l.pct<-0.5);
-    const far=!jl.length?'':' Since '+shortDate(jl[0].from)+': '+
-      (down.length===0?'all four are up.':up.length===0?'all four are down.':
-       names(up)+' up, '+names(down)+' down.');
-    const verdict=near+far;
-
-    b.innerHTML=
-      '<div class="card" style="margin-bottom:12px"><div class="muted" style="line-height:1.6">'+h(verdict)+'</div></div>'+
-      '<div class="sec" style="margin-top:4px">The arc</div>'+journeyChart(progRange<90?90:progRange)+
-      '<div class="sec">Right now</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 16px 12px">'+
-        tile('hrv',M.hrv.label,M.hrv.cur,M.hrv.unit,M.hrv.d,'up',1)+
-        tile('rhr',M.rhr.label,M.rhr.cur,M.rhr.unit,M.rhr.d,'down',0)+
-        tile('vo2',M.vo2.label,M.vo2.cur,M.vo2.unit,M.vo2.d,'up',1)+
-        tile('sleep',M.sleep.label,M.sleep.cur,M.sleep.unit,M.sleep.d,'up',1)+
-      '</div>'+
-      (progOpen&&M[progOpen]?rangeBar()+metricCard(M[progOpen].name,M[progOpen].cur||0,M[progOpen].unit,M[progOpen].data,M[progOpen].better,M[progOpen].dec):
-        '<div class="muted" style="margin:0 20px 14px">Tap a tile for the full chart.</div>')+
-      '<div class="sec">Recovery \u00B7 daily</div>'+
-      '<div class="muted" style="margin:-4px 20px 9px;line-height:1.6">How recovered you are today, against your own 60-day normal. Read it daily.</div>'+
-      scoreCard()+
-      partsCard(S.score.parts,'Each part blends last night (60%) with your 7-day trend (40%), both against your own 60-day normal. Inside your normal scores about 75\u201385; below it falls away.')+
-      '<div class="sec">Fitness \u00B7 monthly</div>'+
-      fitnessCard()+
-      '<div class="sec">Summary</div><div class="card">'+
-      '<div class="muted" style="margin-bottom:10px">Thirty days of numbers in one block, for a full analysis elsewhere.</div>'+
-      '<button class="btn" style="width:100%;margin:0" onclick="showMonthly()">Build 30-day summary</button></div>';
-  } else if(progTab==='body'){
-    const w=(DB.get('weight_log')||[]),bpl=(DB.get('bp_log')||[]);
-    const kg=w.length?w[w.length-1].kg:0;
-    const kgFirst=w.length?w[0].kg:0;
-    const bp=bpl.length?bpl[bpl.length-1]:null;
-    const wk=weekMet(0);
-    const vol=weeklyVolume(0);
-    const under=Object.entries(vol).filter(([k,v])=>v<VOL_BAND[0]).map(([k])=>k);
-
-    // one line that answers "is the training side on track"
-    const verdict=[
-      wk.str>=2?'strength on track':'only '+wk.str+' strength session'+(wk.str===1?'':'s')+' this week',
-      wk.aer>=AERO_TARGET?'aerobic done':wk.aer+'/'+AERO_TARGET+' aerobic blocks'
-    ].join(' \u00B7 ');
-
-    b.innerHTML=
-      '<div class="card" style="margin-bottom:12px"><div class="muted" style="line-height:1.6">'+h(verdict)+'</div></div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:0 16px 12px">'+
-        miniTile('Weight',kg?kg.toFixed(1):'\u2014','kg',kg&&kgFirst?+(kg-kgFirst).toFixed(1):null,'down')+
-        miniTile('Blood pressure',bp?bp.sys+'/'+bp.dia:'\u2014','',null,'')+
-        miniTile('Core level',S.core,CORE_LEVELS[S.core].label,null,'')+
-      '</div>'+
-      '<div class="sec" style="margin-top:4px">Weight</div>'+weightCard()+
-      (w.length>1?'<div class="metric" style="padding:12px 14px"><canvas id="c-wt" style="height:56px"></canvas></div>':'')+
-      '<div class="sec">Strength over time</div>'+strengthCard()+
-      '<div class="sec">Sets per muscle this week</div>'+volumePanel()+
-      (under.length?'<div class="card"><div class="muted" style="line-height:1.6">Behind the 8-set band: '+h(under.join(', '))+'</div></div>':'')+
-      '<div class="sec">Working weights</div>'+weightsTable();
-
+  const b=el('p-body'),R=progRange;
+  const w=(DB.get('weight_log')||[]),lw=w.length?w[w.length-1]:null;
+  const wAge=lw?daysBetween(lw.date,TODAY):null;
+  const wThen=lw?w.filter(r=>r.date<=addDays(lw.date,-21)).pop():null;
+  const wFresh=lw&&wAge<=14;
+  const st=stepsAvg();
+  const sl=sleepRecords();
+  const M={
+    hrv:{label:'HRV',cur:S.hrv7,unit:'ms',d:trend28('heart_rate_variability'),better:'up',dec:1,thr:0.5,
+      data:vals('heart_rate_variability',R),
+      note:S.hrvBand?'Your normal band is '+S.hrvBand[0].toFixed(0)+'–'+S.hrvBand[1].toFixed(0)+' ms over the last 60 days. Inside it is the good signal, not a number that has to keep rising.':''},
+    rhr:{label:'Resting HR',cur:mean(S.rhrV.slice(-7)),unit:'bpm',d:trend28('resting_heart_rate'),better:'down',dec:0,thr:0.5,
+      data:vals('resting_heart_rate',R)},
+    vo2:{label:'VO2max',cur:S.vo2,unit:'',d:trend28('vo2_max'),better:'up',dec:1,thr:0.3,
+      data:vals('vo2_max',R),note:'A trailing estimate from outdoor walks and runs. A hilly or bad-day run pulls it down for a week or two.'},
+    sleep:{label:'Sleep',cur:mean(sl.slice(-7).map(x=>x.totalSleep||0)),unit:'h',d:trend28('',sleepSeries()),better:'up',dec:1,thr:0.3,
+      data:sl.slice(-R).map(x=>x.totalSleep||0).filter(x=>x>0)},
+    steps:{label:'Steps a day',cur:st,unit:'',d:trend28('step_count'),better:'up',dec:0,thr:300,
+      data:vals('step_count',R),fmt:v=>(v<0?'-':'')+fmtK(Math.abs(v)),
+      note:'Daily volume is the lever your own data points at: more steps one day, better HRV the next morning.'}
+  };
+  const t=k=>tile({key:k,label:M[k].label,val:M[k].cur?(k==='steps'?fmtK(M[k].cur):M[k].cur.toFixed(M[k].dec)):'',
+    unit:M[k].unit,d:M[k].d,better:M[k].better,dec:M[k].dec,thr:M[k].thr,fmt:M[k].fmt||null});
+  const wTile=tile({key:'weight',label:'Weight',val:lw?lw.kg.toFixed(1):'',unit:'kg',
+    d:wFresh&&wThen?+(lw.kg-wThen.kg).toFixed(1):null,better:'down',dec:1,thr:0.3,
+    sub:!lw?'not logged yet':wFresh?(wThen?'vs '+shortDate(wThen.date):'logged '+shortDate(lw.date)):'last weighed '+shortDate(lw.date),
+    warn:lw&&!wFresh});
+  let detail='<div class="muted" style="margin:0 20px 14px">Tap a tile for the chart.</div>';
+  if(progOpen==='weight'){
+    detail=weightCard()+(w.length>1?'<div class="metric" style="padding:12px 14px"><canvas id="c-wt" style="height:56px"></canvas></div>':'')+
+      '<button class="btn" onclick="openMeasure()">Log weight</button>';
     if(w.length>1)setTimeout(()=>{const c=el('c-wt');if(c){c.dataset.h=56;sparkline('c-wt',w.map(r=>r.kg),'#9A9AA5');}},0);
+  } else if(progOpen&&M[progOpen]){
+    const m=M[progOpen];
+    detail=rangeBar()+metricCard(m.label,m.cur||0,m.unit,m.data,m.better,m.dec,m.note);
   }
+  b.innerHTML=
+    '<div class="tiles">'+t('hrv')+t('rhr')+t('vo2')+t('sleep')+t('steps')+wTile+'</div>'+
+    detail+
+    '<div class="sec">Runs</div>'+runsCard()+
+    '<div class="sec">Strength · working weights</div>'+weightsTable(strAll?99:5);
 }
 
 /* ═══ 21. HISTORY ═══ */
-function partsCard(parts,note){
-  return '<div class="card">'+parts.map(([l,v,m])=>
-    '<div style="margin-bottom:8px"><div class="row" style="margin-bottom:3px"><span class="muted">'+l+'</span>'+
-    '<span class="muted">'+(v===null?'no data':Math.round(v)+' / '+m)+'</span></div>'+
-    '<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+(v===null?0:Math.round(v/m*100))+'%;background:var(--t2)"></div></div></div>').join('')+
-    (note?'<div class="muted" style="margin-top:6px;line-height:1.6">'+note+'</div>':'')+'</div>';
-}
-function fitnessMonthTable(){
-  const m=fitnessMonths();
-  if(m.length<2)return '';
-  const cell=function(v,prev,dec,better){
-    if(v===undefined||v===null||!v)return '<span style="flex:1;text-align:right;font-size:11px">\u2013</span>';
-    let col='var(--t1)';
-    if(prev){const d=v-prev;const good=better==='down'?d<0:d>0;
-      if(Math.abs(d)>=(dec?0.3:0.5))col=good?'var(--green)':'var(--red)';}
-    return '<span style="flex:1;text-align:right;font-size:11px;color:'+col+'">'+v.toFixed(dec)+'</span>';
-  };
-  return '<div class="card" style="padding:12px 14px">'+
-    '<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)">'+
-      '<span class="muted" style="flex:1.1;font-size:8px">Month</span>'+
-      '<span class="muted" style="flex:1;text-align:right;font-size:8px">Score</span>'+
-      '<span class="muted" style="flex:1;text-align:right;font-size:8px">VO2</span>'+
-      '<span class="muted" style="flex:1;text-align:right;white-space:nowrap;font-size:8px">Cardio rec</span>'+
-      '<span class="muted" style="flex:1;text-align:right;white-space:nowrap;font-size:8px">Rest HR</span></div>'+
-    m.map(function(r,i){
-      const p=i?m[i-1]:null;
-      return '<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">'+
-        '<span style="flex:1.1;font-size:11px">'+r.month+'</span>'+
-        cell(r.total,p&&p.total,0,'up')+cell(r.vo2,p&&p.vo2,1,'up')+
-        cell(r.cr,p&&p.cr,0,'up')+cell(r.rhr,p&&p.rhr,0,'down')+'</div>';
-    }).join('')+
-    '<div class="muted" style="margin-top:9px;line-height:1.6">End of each month. Green means it moved the right way versus the month before.</div></div>';
-}
-function fitnessCard(){
-  const F=S.fit;
-  if(!F)return '<div class="card"><div class="muted">Not enough data yet.</div></div>';
-  const r=F.raw, months=fitnessMonths();
-  const col=F.total>=75?'var(--green)':F.total>=50?'var(--t1)':'var(--yellow)';
-  const first=months.length?months[0]:null;
-  const drift=first?F.total-first.total:null;
-  if(months.length>1)setTimeout(()=>drawMonthBars('c-fitmo',months),0);
-  // how far VO2max still has to go
-  const vlo=32,vhi=44,goal=40;
-  const pct=v=>Math.max(0,Math.min(100,(v-vlo)/(vhi-vlo)*100));
-  return '<div class="card">'+
-    '<div class="row" style="align-items:flex-end;margin-bottom:12px">'+
-      '<div><div style="font-family:\'Instrument Serif\',serif;font-size:38px;color:'+col+'">'+F.total+'</div>'+
-      '<div class="muted" style="margin-top:2px">'+(drift===null?'':(drift>0?'+':'')+drift+' since '+first.month)+'</div></div>'+
-      '<div class="muted" style="text-align:right;max-width:58%;line-height:1.6">How fit you are. Moves over months \u2014 do not read it daily.</div></div>'+
-    (months.length>1?'<canvas id="c-fitmo" style="height:74px;margin-bottom:12px"></canvas>':'')+
-    (r.vo2?'<div style="margin-bottom:14px">'+
-      '<div class="row" style="margin-bottom:5px"><span class="muted">VO2max to target</span>'+
-      '<span class="muted">'+r.vo2.toFixed(1)+' \u2192 40 \u00B7 '+(40-r.vo2).toFixed(1)+' to go</span></div>'+
-      '<div style="height:8px;background:var(--bg3);border-radius:4px;position:relative;overflow:hidden">'+
-        '<div style="position:absolute;left:0;top:0;bottom:0;width:'+pct(r.vo2)+'%;background:var(--green);opacity:.75"></div>'+
-        '<div style="position:absolute;left:'+pct(goal)+'%;top:-2px;bottom:-2px;width:2px;background:var(--t1)"></div>'+
-      '</div>'+
-      '<div class="row" style="margin-top:3px"><span class="muted" style="font-size:9px">32</span>'+
-      '<span class="muted" style="font-size:9px">goal 40</span>'+
-      '<span class="muted" style="font-size:9px">44</span></div></div>':'')+
-    F.parts.map(([l,v,m])=>
-      '<div style="margin-bottom:8px"><div class="row" style="margin-bottom:3px"><span class="muted">'+l+'</span>'+
-      '<span class="muted">'+(v===null?'no data':Math.round(v)+' / '+m)+'</span></div>'+
-      '<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden"><div style="height:100%;width:'+(v===null?0:Math.round(v/m*100))+'%;background:var(--t2)"></div></div></div>').join('')+
-    '<div class="muted" style="margin-top:6px;line-height:1.6">'+
-      (r.vo2?'VO2max '+r.vo2.toFixed(1)+' ':'')+(r.cr?'\u00B7 cardio recovery '+r.cr.toFixed(0)+' ':'')+
-      (r.rhr30?'\u00B7 resting HR '+r.rhr30.toFixed(0)+' ':'')+(r.bp?'\u00B7 BP '+r.bp.sys+'/'+r.bp.dia:'')+
-      '. Judged against health norms, not your own range.</div></div>';
-}
-function drawMonthBars(id,months){
-  const c=el(id);if(!c||!c.parentElement)return;
-  const w=c.parentElement.offsetWidth;if(!w||w<20){setTimeout(()=>drawMonthBars(id,months),300);return;}
-  const dpr=window.devicePixelRatio||1,h=74;
-  c.width=w*dpr;c.height=h*dpr;
-  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
-  const L=2,R=2,T=4,B=16,W=w-L-R,H=h-T-B;
-  const mx=Math.max(70,...months.map(m=>m.total));
-  const bw=Math.min(46,(W/months.length)-8);
-  x.font='9px "DM Mono",monospace';x.textAlign='center';
-  months.forEach((m,i)=>{
-    const xx=L+(W/months.length)*i+((W/months.length)-bw)/2;
-    const hh=Math.round(m.total/mx*H);
-    const prev=i?months[i-1].total:null;
-    x.fillStyle=prev===null?'#5E5E68':m.total>prev?'#4ADE80':m.total<prev?'#F87171':'#9A9AA5';
-    x.globalAlpha=i===months.length-1?1:.7;
-    x.fillRect(xx,T+H-hh,bw,hh);x.globalAlpha=1;
-    x.fillStyle='#0A0A0B';x.fillText(m.total,xx+bw/2,T+H-hh+12);
-    x.fillStyle='#5E5E68';x.fillText(m.month.slice(5),xx+bw/2,h-4);
-  });
-}
-/* Where the score has been, not just where it is: one bar a day,
-   coloured by band, with the band edges drawn in. */
-function scoreCard(){
-  const hist=scoreHistory(60);
-  if(hist.length<2)
-    return '<div class="card"><div style="font-family:\'Instrument Serif\',serif;font-size:38px">'+S.score.total+'</div>'+
-      '<div class="muted" style="margin-top:6px">History appears once there are a few days of health data.</div></div>';
-  const now=hist[hist.length-1].score;
-  const wk=hist.filter(x=>x.date<=addDays(TODAY,-7)).pop();
-  const mo=hist.filter(x=>x.date<=addDays(TODAY,-28)).pop();
-  const dW=wk?now-wk.score:null, dM=mo?now-mo.score:null;
-  const dcol=d=>d===null?'var(--t3)':d>=3?'var(--green)':d<=-3?'var(--yellow)':'var(--t2)';
-  const dtxt=d=>d===null?'\u2014':(d>0?'+':'')+d;
-  const avg30=Math.round(mean(hist.slice(-30).map(x=>x.score)));
-  setTimeout(()=>drawScoreBars('c-score',hist.slice(-30)),0);
-  return '<div class="card">'+
-    '<div class="row" style="align-items:flex-end;margin-bottom:12px">'+
-      '<div><div style="font-family:\'Instrument Serif\',serif;font-size:38px;color:'+scoreColour(now)+'">'+now+'</div>'+
-      '<div class="muted" style="margin-top:2px">'+scoreWord(now)+' \u00B7 30-day average '+avg30+'</div></div>'+
-      '<div style="text-align:right"><div class="muted">vs last week <span style="color:'+dcol(dW)+'">'+dtxt(dW)+'</span></div>'+
-      '<div class="muted" style="margin-top:3px">vs 4 weeks <span style="color:'+dcol(dM)+'">'+dtxt(dM)+'</span></div></div>'+
-    '</div>'+
-    '<canvas id="c-score" style="height:96px"></canvas>'+
-    '<div class="row" style="margin-top:7px">'+
-      '<span class="muted" style="font-size:9px">30 days ago</span>'+
-      '<span class="muted" style="font-size:9px;color:var(--green)">85+ strong</span>'+
-      '<span class="muted" style="font-size:9px">70\u201384 normal</span>'+
-      '<span class="muted" style="font-size:9px;color:var(--yellow)">55\u201369</span>'+
-      '<span class="muted" style="font-size:9px">today</span></div>'+
-  '</div>';
-}
-function drawScoreBars(id,hist){
-  const c=el(id);if(!c||!c.parentElement)return;
-  const w=c.parentElement.offsetWidth;if(!w||w<20){setTimeout(()=>drawScoreBars(id,hist),300);return;}
-  const dpr=window.devicePixelRatio||1,h=96;
-  c.width=w*dpr;c.height=h*dpr;
-  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
-  const L=24,R=4,T=6,B=6,W=w-L-R,H=h-T-B;
-  const lo=40,hi=100;
-  const Y=v=>T+H-((Math.max(lo,Math.min(hi,v))-lo)/(hi-lo))*H;
-  x.font='9px "DM Mono",monospace';x.textAlign='right';
-  [55,70,85].forEach(v=>{
-    x.strokeStyle='#232327';x.lineWidth=1;x.setLineDash([2,3]);
-    x.beginPath();x.moveTo(L,Y(v));x.lineTo(L+W,Y(v));x.stroke();x.setLineDash([]);
-    x.fillStyle='#5E5E68';x.fillText(v,L-4,Y(v)+3);
-  });
-  const bw=Math.max(2,(W/hist.length)-2);
-  hist.forEach((d,i)=>{
-    const xx=L+i*(W/hist.length);
-    const col=d.score>=85?'#4ADE80':d.score>=70?'#9A9AA5':d.score>=55?'#FBBF24':'#F87171';
-    x.fillStyle=col;x.globalAlpha=(i===hist.length-1)?1:.75;
-    const yy=Y(d.score);
-    x.fillRect(xx,yy,bw,Math.max(2,(T+H)-yy));
-    x.globalAlpha=1;
-  });
-}
-/* How fast the weight is actually coming off, over several windows. */
+/* How fast the weight is actually coming off, over several windows. A
+   window only gets a row when there is a weigh-in inside it: "97.6 to
+   97.6, 0 per week" six weeks after the last reading was a blank dressed
+   up as a result. */
 function weightTrends(){
   const w=(DB.get('weight_log')||[]).slice().sort((a,b)=>a.date.localeCompare(b.date));
   if(w.length<2)return null;
   const now=w[w.length-1];
-  const at=days=>{const cut=addDays(TODAY,-days);const p=w.filter(r=>r.date<=cut);return p.length?p[p.length-1]:null;};
+  const at=days=>{const cut=addDays(TODAY,-days);
+    if(now.date<=cut)return null;
+    const p=w.filter(r=>r.date<=cut);return p.length?p[p.length-1]:null;};
   const rows=[[7,'7 days'],[30,'30 days'],[90,'90 days']].map(function(x){
     const p=at(x[0]); if(!p)return null;
     const span=daysBetween(p.date,now.date)||1;
@@ -2743,7 +2270,7 @@ function weightTrends(){
     return {label:x[1],from:p.kg,diff:+diff.toFixed(1),perWeek:+(diff/span*7).toFixed(2)};
   }).filter(Boolean);
   const first=w[0], spanAll=daysBetween(first.date,now.date)||1;
-  return {now:now.kg,rows,n:w.length,all:{from:first.kg,date:first.date,
+  return {now:now.kg,date:now.date,age:daysBetween(now.date,TODAY),rows,n:w.length,all:{from:first.kg,date:first.date,
     diff:+(now.kg-first.kg).toFixed(1),perWeek:+((now.kg-first.kg)/spanAll*7).toFixed(2)}};
 }
 function weightCard(){
@@ -2754,32 +2281,21 @@ function weightCard(){
     '<div class="row" style="align-items:flex-end;margin-bottom:12px">'+
       '<div><div style="font-family:\'Instrument Serif\',serif;font-size:32px">'+t.now.toFixed(1)+
       '<span style="font-size:11px;color:var(--t3)"> kg</span></div>'+
-      '<div class="muted" style="margin-top:2px">'+t.n+' readings since '+t.all.date+'</div></div>'+
+      '<div class="muted" style="margin-top:2px'+(t.age>14?';color:var(--yellow)':'')+'">'+
+        (t.age>14?'last weighed '+shortDate(t.date)+' · '+t.age+' days ago':t.n+' readings since '+shortDate(t.all.date))+'</div></div>'+
       '<div style="text-align:right"><div style="color:'+col(t.all.perWeek)+';font-size:13px">'+
-      (t.all.diff>0?'+':'')+t.all.diff+' kg total</div><div class="muted">'+
+      (t.all.diff>0?'+':'')+t.all.diff+' kg since '+shortDate(t.all.date)+'</div><div class="muted">'+
       (t.all.perWeek>0?'+':'')+t.all.perWeek+' kg / week</div></div></div>'+
     t.rows.map(function(r){return '<div class="row" style="padding:7px 0;border-bottom:1px solid var(--line)">'+
       '<span class="muted">last '+r.label+'</span>'+
-      '<span style="font-size:11px">'+r.from.toFixed(1)+' \u2192 '+t.now.toFixed(1)+
+      '<span style="font-size:11px">'+r.from.toFixed(1)+' → '+t.now.toFixed(1)+
       ' <span style="color:'+col(r.perWeek)+'">'+(r.diff>0?'+':'')+r.diff+'</span>'+
       ' <span class="muted">'+(r.perWeek>0?'+':'')+r.perWeek+'/wk</span></span></div>';}).join('')+
-    '<div class="muted" style="margin-top:9px;line-height:1.6">Half a kilo a week is the sustainable rate \u2014 faster costs muscle.</div>'+
+    '<div class="muted" style="margin-top:9px;line-height:1.6">Half a kilo a week is the sustainable rate — faster costs muscle.</div>'+
     '</div>';
 }
-function miniTile(label,val,unit,delta,better){
-  let col='var(--t2)',extra='';
-  if(delta!==null&&delta!==undefined&&Math.abs(delta)>=0.3){
-    const good=better==='down'?delta<0:delta>0;
-    col=good?'var(--green)':'var(--red)';
-    extra='<div style="color:'+col+';font-size:10px;margin-top:3px">'+(delta>0?'+':'')+delta.toFixed(1)+'</div>';
-  }
-  return '<div style="background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:11px 10px">'+
-    '<div class="muted" style="font-size:8px;letter-spacing:.1em;text-transform:uppercase">'+label+'</div>'+
-    '<div style="font-family:\'Instrument Serif\',serif;font-size:20px;margin-top:4px">'+val+
-      (unit?'<span style="font-size:9px;color:var(--t3)"> '+unit+'</span>':'')+'</div>'+extra+'</div>';
-}
 /* Only exercises you have actually loaded, newest first. */
-function weightsTable(){
+function weightsTable(limit){
   const log=realSessions().slice(-30),byEx={};
   log.forEach(x=>Object.entries(x.exercises||{}).forEach(([id,sets])=>{
     const done=sets.filter(y=>y.done&&y.kg>0).map(y=>y.kg);
@@ -2791,148 +2307,18 @@ function weightsTable(){
     return {name:e.name,kg:now.kg,d:now.kg-first.kg,date:now.d};
   }).filter(Boolean).sort((a,b)=>b.date.localeCompare(a.date));
   if(!rows.length)return '<div class="card"><div class="muted">Log a few loaded sessions first.</div></div>';
-  return '<div class="card">'+rows.map(r=>
+  const show=rows.slice(0,limit||rows.length);
+  return '<div class="card" style="padding-bottom:8px">'+show.map(r=>
     '<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">'+
-    '<span style="font-size:11px">'+h(r.name)+'</span>'+
+    '<span style="font-size:11px">'+h(r.name)+'<span class="muted" style="font-size:9px"> · '+shortDate(r.date)+'</span></span>'+
     '<span style="font-size:11px">'+r.kg+' kg'+
       (Math.abs(r.d)>=0.5?' <span style="color:'+(r.d>0?'var(--green)':'var(--t3)')+'">'+(r.d>0?'+':'')+r.d.toFixed(1)+'</span>':'')+
-    '</span></div>').join('')+'</div>';
-}
-
-/* ═══ STRENGTH ARC ═══
-   One line for overall strength: every loaded exercise indexed to its own
-   first working weight, then averaged. That way a 3 kg jump on a curl and
-   a 3 kg jump on a press count for what they are relative to each other. */
-function strengthSeries(weeks){
-  const byEx={};
-  realSessions().forEach(s=>{
-    Object.entries(s.exercises||{}).forEach(([id,sets])=>{
-      const done=sets.filter(y=>y.done&&y.kg>0).map(y=>y.kg);
-      if(!done.length)return;
-      (byEx[id]=byEx[id]||[]).push({d:s.date,kg:Math.max.apply(null,done)});
-    });
-  });
-  const ids=Object.keys(byEx).filter(id=>byEx[id].length>=2);
-  if(ids.length<2)return null;
-  const base={};ids.forEach(id=>{base[id]=byEx[id][0].kg;});
-  const out=[];
-  for(let i=weeks-1;i>=0;i--){
-    const end=addDays(weekStart(),-7*i+6);
-    const idx=[];
-    ids.forEach(id=>{
-      const hits=byEx[id].filter(p=>p.d<=end);
-      if(hits.length)idx.push(hits[hits.length-1].kg/base[id]*100);
-    });
-    if(idx.length>=2)out.push({week:addDays(weekStart(),-7*i),idx:mean(idx),n:idx.length});
-  }
-  return out.length>=2?{points:out,ids:ids.length}:null;
-}
-function volumeSeries(weeks){
-  const out=[];
-  for(let i=weeks-1;i>=0;i--){
-    const start=addDays(weekStart(),-7*i), end=addDays(start,6);
-    let load=0;
-    sessions().filter(s=>s.date>=start&&s.date<=end&&!s.skipped).forEach(s=>{
-      Object.values(s.exercises||{}).forEach(sets=>sets.forEach(y=>{
-        if(y.done)load+=(y.kg||0)*(y.reps||0);
-      }));
-    });
-    out.push({week:start,load:Math.round(load)});
-  }
-  return out;
-}
-function strengthCard(){
-  const st=strengthSeries(14), vol=volumeSeries(14);
-  if(!st)return '<div class="card"><div class="muted">Log a few loaded sessions and your strength curve appears here.</div></div>';
-  const first=st.points[0].idx, last=st.points[st.points.length-1].idx;
-  const pct=+(last-first).toFixed(1);
-  const totalLoad=vol.reduce((a,b)=>a+b.load,0);
-  const thisWk=vol[vol.length-1].load, prevWk=vol.length>1?vol[vol.length-2].load:0;
-  setTimeout(()=>drawStrength('c-strength',st.points,vol),0);
-  return '<div class="card" style="padding:14px 12px 12px">'+
-    '<div class="row" style="align-items:flex-end;margin-bottom:10px;padding:0 2px">'+
-      '<div><div style="font-family:\'Instrument Serif\',serif;font-size:32px;color:'+(pct>1?'var(--green)':pct<-1?'var(--red)':'var(--t1)')+'">'+
-        (pct>0?'+':'')+pct+'%</div>'+
-      '<div class="muted" style="margin-top:2px">across '+st.ids+' loaded exercises</div></div>'+
-      '<div style="text-align:right"><div class="muted">this week '+Math.round(thisWk/1000)+'k kg</div>'+
-      '<div class="muted" style="margin-top:3px">'+(prevWk?(thisWk>=prevWk?'up from ':'down from ')+Math.round(prevWk/1000)+'k':'')+'</div></div>'+
-    '</div>'+
-    '<canvas id="c-strength" style="height:150px"></canvas>'+
-    '<div style="display:flex;gap:12px;margin-top:9px;padding:0 2px">'+
-      '<div style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:3px;background:#4ADE80;border-radius:2px"></span>'+
-      '<span class="muted" style="font-size:10px">strength index</span></div>'+
-      '<div style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:7px;background:#7DA6F0;opacity:.5;border-radius:2px"></span>'+
-      '<span class="muted" style="font-size:10px">weekly volume (kg lifted)</span></div>'+
-    '</div>'+
-    '<div class="muted" style="margin-top:9px;line-height:1.6">Each exercise is indexed to its own starting weight, then averaged \u2014 so light and heavy lifts count equally. Volume is sets \u00D7 reps \u00D7 kg.</div>'+
-  '</div>';
-}
-function drawStrength(id,pts,vol){
-  const c=el(id);if(!c||!c.parentElement)return;
-  const w=c.parentElement.offsetWidth;if(!w||w<20){setTimeout(()=>drawStrength(id,pts,vol),300);return;}
-  const dpr=window.devicePixelRatio||1,h=150;
-  c.width=w*dpr;c.height=h*dpr;
-  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
-  const L=30,R=6,T=8,B=16,W=w-L-R,H=h-T-B;
-  const vals=pts.map(p=>p.idx);
-  let mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals);
-  mn=Math.min(mn,100);mx=Math.max(mx,100);
-  const pad=Math.max(2,(mx-mn)*0.2);mn-=pad;mx+=pad;
-  const n=Math.max(pts.length,vol.length);
-  const X=i=>L+(i/(n-1))*W;
-  const Y=v=>T+H-((v-mn)/Math.max(0.001,mx-mn))*H;
-  // volume bars first, behind the line
-  const vmax=Math.max(1,...vol.map(v=>v.load));
-  const bw=Math.max(4,(W/n)-4);
-  vol.forEach((v,i)=>{
-    const hh=Math.round(v.load/vmax*(H*0.55));
-    x.fillStyle='#7DA6F0';x.globalAlpha=v.load?.28:.08;
-    x.fillRect(X(i)-bw/2,T+H-hh,bw,Math.max(2,hh));x.globalAlpha=1;
-  });
-  // grid
-  x.font='9px "DM Mono",monospace';x.textAlign='right';
-  const step=(mx-mn)>40?20:(mx-mn)>20?10:5;
-  for(let v=Math.ceil(mn/step)*step;v<=mx;v+=step){
-    x.strokeStyle=v===100?'#33333A':'#1C1C1F';x.setLineDash(v===100?[3,3]:[]);
-    x.beginPath();x.moveTo(L,Y(v));x.lineTo(L+W,Y(v));x.stroke();x.setLineDash([]);
-    x.fillStyle=v===100?'#9A9AA5':'#5E5E68';x.fillText((v>100?'+':'')+(v-100)+'%',L-5,Y(v)+3);
-  }
-  // the index line
-  const off=n-pts.length;
-  x.beginPath();
-  pts.forEach((p,i)=>{const xx=X(i+off),yy=Y(p.idx);i?x.lineTo(xx,yy):x.moveTo(xx,yy);});
-  x.strokeStyle='#4ADE80';x.lineWidth=2.4;x.lineJoin='round';x.stroke();
-  const lastP=pts[pts.length-1];
-  x.beginPath();x.arc(X(n-1),Y(lastP.idx),3,0,7);x.fillStyle='#4ADE80';x.fill();
-  x.fillStyle='#5E5E68';x.textAlign='left';x.fillText(vol[0].week.slice(5),L,h-4);
-  x.textAlign='right';x.fillText('this week',w-R,h-4);
-}
-
-function volumePanel(){
-  const now=weeklyVolume(0),prev=weeklyVolume(1);
-  const names={chest:'Chest',shoulders:'Shoulders',triceps:'Triceps',back:'Back',biceps:'Biceps',
-    quads:'Quads',hamstrings:'Hamstrings',glutes:'Glutes',calves:'Calves',core:'Core'};
-  const keys=Object.keys(names).filter(k=>now[k]||prev[k]);
-  if(!keys.length)return '<div class="card"><div class="muted">Nothing logged yet this week.</div></div>';
-  const day=(new Date(TODAY).getDay()+6)%7;
-  const proRata=Math.max(1,Math.round(VOL_BAND[0]*(day+1)/7));
-  return '<div class="card">'+
-    '<div class="muted" style="margin-bottom:10px;line-height:1.6">Target band '+VOL_BAND[0]+'\u2013'+VOL_BAND[1]+
-    ' hard sets per muscle per week. Day '+(day+1)+' of 7, so on pace is about '+proRata+' by now.</div>'+
-    keys.map(k=>{
-      const v=now[k]||0,p=prev[k]||0;
-      const col=v>=VOL_BAND[0]?'var(--green)':v>=proRata?'var(--t2)':'var(--t3)';
-      const w=Math.min(100,Math.round(v/VOL_BAND[1]*100));
-      return '<div style="margin-bottom:9px">'+
-        '<div class="row" style="margin-bottom:3px"><span class="muted">'+names[k]+'</span>'+
-        '<span class="muted" style="color:'+col+'">'+v+(p?' <span style="color:var(--t3)">(last week '+p+')</span>':'')+'</span></div>'+
-        '<div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;position:relative">'+
-        '<div style="height:100%;width:'+w+'%;background:'+col+'"></div>'+
-        '<div style="position:absolute;left:'+Math.round(VOL_BAND[0]/VOL_BAND[1]*100)+'%;top:0;bottom:0;width:1px;background:var(--t3)"></div>'+
-        '</div></div>';
-    }).join('')+
+    '</span></div>').join('')+
+    (rows.length>5?'<button class="lnk" style="margin-top:4px" onclick="toggleStr()">'+
+      (limit>=rows.length?'Show fewer ▴':(rows.length-show.length)+' more ▾')+'</button>':'')+
     '</div>';
 }
+
 /* ═══ HISTORY AS WEEKS ═══
    Twenty-five identical cards told him nothing. The week is the unit he
    can actually steer: it is where the imbalance shows up. */
@@ -2991,7 +2377,7 @@ function renderHistory(){
       }).join(''):'<div class="muted">No strength session this week</div>')+
       r.aeros.map(x=>'<div class="row" style="padding:3px 0"><span class="muted" style="color:var(--blue)">'+
         h(modeName(x.mode))+(x.auto?' \u00B7 watch':'')+'</span><span class="muted">'+x.date.slice(5)+
-        ' \u00B7 '+x.minutes+' min'+(x.avg?' \u00B7 '+x.avg+' bpm':'')+'</span></div>').join('')+
+        (x.km?' \u00B7 '+x.km+' km':'')+' \u00B7 '+x.minutes+' min'+(x.avg?' \u00B7 '+x.avg+' bpm':'')+'</span></div>').join('')+
       '</div>';
     return '<div class="hcard" onclick="toggleWeek(\''+r.key+'\')" style="cursor:pointer'+
       (open?';border-color:var(--line2)':'')+'">'+
@@ -3026,6 +2412,7 @@ function openSettings(){
         '<div class="step"><div onclick="bumpAero(-1)">\u2212</div><b>'+AERO_TARGET+'</b><div onclick="bumpAero(1)">+</div></div>')+
       srow('Exercises',excluded().length?excluded().length+' turned off':'All available',
         '<div class="step"><div onclick="openExercises()" style="width:auto;padding:0 12px;font-size:11px">Manage</div></div>')+
+      srow('Training phase',PHASE_NAME[S.phase]+' \u2014 decides which exercises and how many sets you get','')+
     '</div>'+
     '<div class="sec">Health data</div>'+
     '<div class="card" style="margin:0 0 10px">'+
@@ -3047,7 +2434,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v9.6 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v10.0 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -3060,7 +2447,7 @@ window.addEventListener('unhandledrejection',e=>{LASTERR='promise: '+(e.reason&&
 const WANT=['heart_rate_variability','resting_heart_rate','respiratory_rate','sleep_analysis',
   'step_count','vo2_max','apple_exercise_time','apple_sleeping_wrist_temperature'];
 function missingMetrics(){
-  const m=DB.get('health_metrics')||{};
+  const m=HM();
   return WANT.filter(k=>!m[k]||!m[k].length);
 }
 const METRIC_NAME={heart_rate_variability:'Heart Rate Variability',resting_heart_rate:'Resting Heart Rate',
@@ -3076,7 +2463,7 @@ function missingNote(){
   const miss=missingMetrics();
   const noWork=!(DB.get('health_workouts')||[]).length&&!!DB.get('health_uploaded');
   const nice=['blood_oxygen_saturation','breathing_disturbances'].filter(k=>{
-    const m=DB.get('health_metrics')||{};return !m[k]||!m[k].length;});
+    const m=HM();return !m[k]||!m[k].length;});
   if(!miss.length&&!nice.length&&!noWork)return '';
   const line=k=>'<div style="padding:2px 0">\u2022 '+h(METRIC_NAME[k]||k)+
     (METRIC_WHY[k]?' <span style="color:var(--t3)">\u2014 '+METRIC_WHY[k]+'</span>':'')+'</div>';
@@ -3105,13 +2492,13 @@ function openDiag(){
   const c=ctx;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const sw=('serviceWorker' in navigator)&&navigator.serviceWorker.controller;
-  const m=DB.get('health_metrics')||{};
+  const m=HM();
   const names=Object.keys(m);
   const newest=names.map(k=>{const a=m[k];return a&&a.length?String(a[a.length-1].date||'').slice(0,10):'';}).filter(Boolean).sort().pop()||'none';
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v9.6')+
+      diagRow('App version','v10.0')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
@@ -3168,7 +2555,7 @@ function hardReload(){
 }
 function copyDiag(){
   const c=ctx;
-  const rep=['Recovery v7.3',
+  const rep=['Recovery v10.0',
     'today='+TODAY,'device='+new Date().toString().slice(0,24),
     'standalone='+(window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true),
     'sw='+!!(navigator.serviceWorker&&navigator.serviceWorker.controller),
@@ -3244,23 +2631,25 @@ function ingest(text){
   try{
     const raw=JSON.parse(text);
     const d=raw.data||raw;
-    const out=DB.get('health_metrics')||{};
+    const out=HM();
     (d.metrics||[]).forEach(m=>{
       const prev=out[m.name]||[];
       const dates=new Set((m.data||[]).map(r=>(r.date||'').slice(0,10)));
       out[m.name]=[...prev.filter(r=>!dates.has((r.date||'').slice(0,10))),...(m.data||[])]
         .sort((a,b)=>String(a.date).localeCompare(String(b.date))).slice(-120);
     });
-    DB.set('health_metrics',out);DB.set('health_uploaded',TODAY);
+    DB.set('health_metrics',out);DB.set('health_uploaded',TODAY);hmReset();
     const nw=ingestWorkouts(d.workouts||[]);
     const n=Object.keys(out).length;
     const miss=missingMetrics();
     const wTot=(DB.get('health_workouts')||[]).length;
-    const qual=Object.keys(autoAero()).length;
     closeSheet();renderAll();
-    toast(n+' metrics \u00B7 '+(nw?nw+' new workouts':(wTot?'no new workouts':'NO workouts'))+
-      (wTot?' \u00B7 '+qual+' aerobic':'')+(miss.length?' \u00B7 '+miss.length+' metrics missing':''));
-  }catch(e){toast('That is not valid JSON');}
+    toast(n+' metrics · '+(nw?nw+' new workout'+(nw===1?'':'s'):(wTot?'no new workouts':'NO workouts'))+
+      (miss.length?' · '+miss.length+' metrics missing':''));
+  }catch(e){
+    LASTERR='import: '+(e&&e.message||e);
+    toast(e instanceof SyntaxError?'That is not valid JSON':'Import failed — see Diagnostics');
+  }
 }
 /* Your watch already knows what you did. Keeping a separate manual log
    meant the app scored four hard rides and a run in October as zero. */
@@ -3287,10 +2676,18 @@ function ingestWorkouts(ws){
     const num=v=>typeof v==='number'?v:(v&&typeof v.qty==='number'?v.qty:0);
     const g=k=>num(hr[k])||num(flat[k]);
     const id=date+'|'+String(w.start||'').slice(11,16)+'|'+Math.round(min);
+    const mode=workoutMode(w.name);
+    const km=+toKm(w.distance&&w.distance.qty,w.distance&&w.distance.units).toFixed(2);
+    const base={id,date,name:String(w.name||'Workout'),mode,
+      min:+min.toFixed(1),avg:+g('avg').toFixed(0),max:+g('max').toFixed(0),km};
+    if(mode==='jog'&&km>0&&min>=8){
+      // runs get their own shelf, so six weeks of walks cannot push them out
+      const det=runDetail(w)||{};
+      upsertRun(Object.assign({id,date,t:String(w.start||'').slice(11,16),km,min:base.min,avg:base.avg,max:base.max,
+        up:+num(w.elevationUp).toFixed(0),hrv:hrvOnDay(date)},det));
+    }
     if(seen.has(id))return;
-    keep.push({id,date,name:String(w.name||'Workout'),mode:workoutMode(w.name),
-      min:+min.toFixed(1),avg:+g('avg').toFixed(0),max:+g('max').toFixed(0),
-      km:+(((w.distance&&w.distance.qty)||0)).toFixed(2)});
+    keep.push(base);
     seen.add(id);added++;
   });
   keep.sort((a,b)=>a.id.localeCompare(b.id));
@@ -3355,64 +2752,13 @@ function buildPatterns(){
 
   return out.sort((a,b)=>Math.abs(b.r)-Math.abs(a.r));
 }
-function strengthWord(r){
-  const a=Math.abs(r);
-  return a<0.15?'no relationship':a<0.3?'weak':a<0.5?'moderate':'strong';
-}
-function renderPatterns(){
-  const pats=buildPatterns();
-  if(!pats.length)return '<div class="card"><div class="muted">Not enough overlapping data yet — patterns need about two weeks.</div></div>';
-  return '<div class="card">'+pats.map(p=>{
-    const col=Math.abs(p.r)<0.15?'var(--t3)':p.r>0?'var(--green)':'var(--red)';
-    return '<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);align-items:baseline">'+
-      '<div style="flex:1;font-size:11px">'+p.title+
-        '<div class="muted" style="font-size:9px;margin-top:2px">'+strengthWord(p.r)+' \u00B7 '+p.n+' days</div></div>'+
-      '<div style="color:'+col+';font-size:12px">'+p.r.toFixed(2)+'</div></div>';
-  }).join('')+'<div class="muted" style="margin-top:9px;line-height:1.6">Under 0.15 means no relationship. These are your own numbers, not general principles.</div></div>';
-}
-
 /* ═══ 25. RETROSPECT — did last week's verdict hold up ═══ */
 function logVerdict(){
   const l=DB.get('advice_log')||[];
   if(l.some(a=>a.date===TODAY))return;
-  l.push({date:TODAY,state:S.verdict.k,why:S.verdict.why[0]||'',hrv:S.hrv||null,ts:Date.now()});
+  l.push({date:TODAY,state:S.verdict.k,why:S.verdict.why[0]||'',hrv:S.hrv||null,ready:S.ready?S.ready.total:null,ts:Date.now()});
   DB.set('advice_log',l.slice(-120));
 }
-function buildRetrospect(){
-  const log=(DB.get('advice_log')||[]).filter(a=>a.date<=addDays(TODAY,-7));
-  if(!log.length)return '<div class="card"><div class="muted">Building history — the first look back appears after a week.</div></div>';
-
-  const wk={};
-  log.forEach(a=>{
-    const d=new Date(a.date);d.setDate(d.getDate()-((d.getDay()+6)%7));
-    const k=iso(d);(wk[k]=wk[k]||[]).push(a);
-  });
-  const weeks=Object.keys(wk).sort().slice(-4).reverse();
-  const hrvBy=Object.fromEntries(metricSeries('heart_rate_variability',120));
-
-  const rows=weeks.map(w=>{
-    const days=wk[w],end=addDays(w,6);
-    const counts={};days.forEach(a=>counts[a.state]=(counts[a.state]||0)+1);
-    const inWeek=[],nextWeek=[];
-    Object.entries(hrvBy).forEach(([d,v])=>{
-      if(d>=w&&d<=end)inWeek.push(v);
-      if(d>addDays(end,0)&&d<=addDays(end,7))nextWeek.push(v);
-    });
-    const a=mean(inWeek),b=mean(nextWeek);
-    const diff=(a&&b)?+(b-a).toFixed(1):null;
-    const col=diff===null?'var(--t3)':diff>=1?'var(--green)':diff<=-1?'var(--red)':'var(--t2)';
-    const word=diff===null?'no follow-up data':diff>=1?'HRV rose after':diff<=-1?'HRV fell after':'HRV flat after';
-    if(diff===null)return '';
-    const mix=Object.entries(counts).map(([k,n])=>n+'\u00D7 '+STATES[k].label.toLowerCase()).join(', ');
-    return '<div style="padding:9px 0;border-bottom:1px solid var(--line)">'+
-      '<div class="row" style="align-items:baseline"><div style="font-size:11px">Week of '+w+'</div>'+
-      '<div style="color:'+col+';font-size:12px">'+(diff>0?'+':'')+diff+' ms</div></div>'+
-      '<div class="muted" style="font-size:9px;margin-top:3px">'+h(mix)+' \u2192 '+word+'</div></div>';
-  }).filter(Boolean);
-  if(!rows.length)return '<div class="card"><div class="muted">No week with follow-up data yet.</div></div>';
-  return '<div class="card">'+rows.join('')+'</div>';
-}
-
 /* ═══ 26. MONTHLY SUMMARY ═══ */
 function monthlySummary(){
   const from=addDays(TODAY,-30);
@@ -3428,8 +2774,6 @@ function monthlySummary(){
   const bp=(DB.get('bp_log')||[]).filter(r=>r.date>=from);
   const adv=(DB.get('advice_log')||[]).filter(a=>a.date>=from);
   const st={};adv.forEach(a=>st[a.state]=(st[a.state]||0)+1);
-  const wellDays=[];   // only present for days logged before v6.4
-  for(let i=0;i<30;i++){const k=addDays(TODAY,-i);const w=DB.get('wellness_'+k);if(w)wellDays.push(w);}
 
   /* The chips and the note are the only subjective record there is.
      Without them in here, the weekly analysis is numbers with no voice. */
@@ -3459,9 +2803,10 @@ function monthlySummary(){
     phase:S.phase,coreLevel:S.core,
     weight:wt.length?{latest:wt[wt.length-1].kg,change:+(wt[wt.length-1].kg-wt[0].kg).toFixed(1),readings:wt.length}:null,
     bloodPressure:bp.length?{readings:bp.length,latest:bp[bp.length-1].sys+'/'+bp[bp.length-1].dia}:null,
-    wellness:{energy:+mean(wellDays.map(w=>w.energy)).toFixed(1),muscles:+mean(wellDays.map(w=>w.muscle)).toFixed(1),
-      mood:+mean(wellDays.map(w=>w.mood)).toFixed(1),daysLogged:wellDays.length},
-    score:S.score.total,
+    recovery:S.ready?S.ready.total:null,
+    runs:runList().filter(r=>r.date>=from).map(r=>({date:r.date,km:r.km,minutes:r.min,avgHr:r.avg,
+      continuousMin:r.cont||undefined,steadyKmh:r.sKmh||undefined,steadyHr:r.sHr||undefined,
+      flags:runFlags(r).length?runFlags(r):undefined})),
     patterns:buildPatterns().map(p=>({relationship:p.title,r:+p.r.toFixed(2),pairedDays:p.n}))
   };
 }
@@ -3506,6 +2851,29 @@ function renderAll(){
   if(el('s-hist').classList.contains('on'))renderHistory();
 }
 window.addEventListener('resize',()=>{if(el('s-prog').classList.contains('on'))renderProgress();else renderToday();});
+/* One-off move to schema 3: runs get their own store, and switches left
+   behind by versions long gone are swept out. Logs and measurements are
+   not touched. */
+function migrate(){
+  try{
+    const cut=addDays(TODAY,-14);
+    Object.keys(localStorage).filter(k=>k.startsWith(P)).forEach(k=>{
+      const n=k.slice(P.length);
+      const m=n.match(/^(sess_open_|manual_session_type_|override_rest_|draft_|am_)(\d{4}-\d\d-\d\d)$/);
+      if(m&&m[2]<cut)localStorage.removeItem(k);
+    });
+    if((DB.get('schema')||0)>=3)return;
+    Object.keys(localStorage).filter(k=>k.startsWith(P)).forEach(k=>{
+      const n=k.slice(P.length);
+      if(/^(deload_dismissed_|alert_dismissed_|adherence_|day_context_|maintenance_)/.test(n)||
+         n==='last_clipboard_import'||n==='deload_anchor')localStorage.removeItem(k);
+    });
+    (DB.get('health_workouts')||[]).filter(w=>w.mode==='jog'&&w.km>0&&w.min>=8).forEach(w=>
+      upsertRun({id:w.id,date:w.date,t:String(w.id).split('|')[1]||'',km:w.km,min:w.min,avg:w.avg,max:w.max,up:0,hrv:hrvOnDay(w.date)}));
+    DB.set('schema',3);
+  }catch(e){LASTERR='migrate: '+(e&&e.message||e);}
+}
+migrate();
 renderAll();
 /* self-contained: manifest built in memory, no extra files required */
 try{
