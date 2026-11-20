@@ -1362,9 +1362,9 @@ function sparkline(id,data,col){
    One question: what do I do today. Four blocks answer it — the call,
    the one action, the week, and a line for how you feel. Everything that
    only described the day moved to Progress. */
-let whyOpen=false,altOpen=false,feelOpen=false;
+let whyOpen=false,showStr=false,showAer=false,feelOpen=false;
 function toggleWhy(){whyOpen=!whyOpen;renderVerdict();}
-function toggleAlt(){altOpen=!altOpen;renderWork();}
+function toggleTool(k){if(k==='str')showStr=!showStr;else showAer=!showAer;renderWork();}
 function toggleFeelOpen(){feelOpen=!feelOpen;renderFoot();}
 function fmtK(n){return (Math.round(n/100)*100).toLocaleString('en-US');}
 function stepsAvg(){const s=metricSeries('step_count',9);return s.length?Math.round(mean(winVals(s,TODAY,7))):0;}
@@ -1426,16 +1426,17 @@ function renderVerdict(){
 }
 
 /* ═══ THE ONE ACTION ═══
-   The plan names one thing. Only that thing gets a card; everything else
-   waits behind "Other options", so the screen can no longer offer a green
-   Start button for the session the call just ruled out. */
+   The plan names one thing and that thing gets the card. The strength
+   session and the aerobic timers are his tools, though, and a tool is
+   never taken away by a call: whatever is not today's plan stays one tap
+   away under its own name, on every kind of day. v10.0 hid them on rest
+   and done days and the whole trainer looked gone. */
 function strengthDoneToday(){return realSessions().some(s=>s.date===TODAY);}
 function plannedAeroMode(){
   if(feelHas('feet'))return 'stepup';
   if(jogThisWeek()>=Math.max(1,AERO_TARGET-1))return 'stepup';
   return 'jog';
 }
-function hardStop(){const v=S.verdict;return v.k==='backoff'||(v.k==='rest'&&!v.soft);}
 function canOverride(){
   const v=S.verdict;
   return v.k==='rest'&&!DB.get('override_rest_'+TODAY)&&(v.soft||S.activeDays>=6)&&
@@ -1487,19 +1488,21 @@ function renderWork(){
   if(mainStr)main='<div id="blk-a"></div>';
   else if(mainAer)main=jogMain?jogCard():'<div id="blk-b"></div>';
   else if(P.do==='rest'||P.do==='easy')main=walkCard();
-  const stop=hardStop();
-  const altStr=!mainStr&&!sDone&&!stop&&S.verdict.k!=='rest';
-  const altAer=!aDone&&!stop&&!(mainAer&&!jogMain);
-  const hasAlt=altStr||altAer;
+  const altStr=!mainStr&&!sDone;
+  const altAer=!aDone&&!(mainAer&&!jogMain);
   // never fold away a session or a timer that is already under way
   const dr=DB.get('draft_'+TODAY);
-  if((dr&&Object.values(dr.marks||{}).some(m=>Object.values(m||{}).some(Boolean))&&!mainStr)||aeroRunning)altOpen=true;
+  if(altStr&&dr&&Object.values(dr.marks||{}).some(m=>Object.values(m||{}).some(Boolean)))showStr=true;
+  if(altAer&&aeroRunning)showAer=true;
+  const tb=(k,on,label)=>'<button class="btn btn-quiet" style="width:auto;flex:1;margin:0;padding:12px 6px;font-size:11px;'+
+    (on?'color:var(--t1);background:var(--bg3)':'color:var(--t2)')+'" onclick="toggleTool(\''+k+'\')">'+label+' '+(on?'\u25B4':'\u25BE')+'</button>';
+  const tools=(altStr||altAer)?'<div style="display:flex;gap:8px;margin:0 16px 10px">'+
+    (altStr?tb('str',showStr,'Strength session'):'')+
+    (altAer?tb('aer',showAer,jogMain?'Other aerobic':'Aerobic block'):'')+'</div>':'';
+  const alt=(altStr&&showStr?'<div id="blk-a"></div>':'')+(altAer&&showAer?'<div id="blk-b"></div>':'');
   const ov=canOverride()&&P.do!=='done';
-  const links=(hasAlt||ov)?'<div class="row" style="margin:-2px 20px 6px">'+
-    (hasAlt?'<button class="lnk" onclick="toggleAlt()">'+(altOpen?'Hide other options ▴':'Other options ▾')+'</button>':'<span></span>')+
-    (ov?'<button class="lnk" onclick="overrideRest()">Train anyway</button>':'')+'</div>':'';
-  const alt=(altOpen&&hasAlt)?(altAer?'<div id="blk-b"></div>':'')+(altStr?'<div id="blk-a"></div>':''):'';
-  w.innerHTML=top+main+links+alt;
+  const links=ov?'<div style="margin:-4px 20px 6px;text-align:right"><button class="lnk" onclick="overrideRest()">Make training today\u2019s plan</button></div>':'';
+  w.innerHTML=top+main+tools+alt+links;
   if(el('blk-a'))renderSession('blk-a');
   if(el('blk-b'))renderAerobic('blk-b');
 }
@@ -1934,7 +1937,7 @@ function renderAerobic(slot){
   const P=S.plan||{};
   const lead=P.do==='aerobic'?'':'<div class="sec" style="margin-top:10px">Aerobic block · optional</div>';
   const count=aeroThisWeek().length;
-  const noIntervals=['deload','ease','stale','rest'].indexOf(S.verdict.k)>=0||P.do==='easy'||
+  const noIntervals=['deload','ease','stale','rest','backoff'].indexOf(S.verdict.k)>=0||P.do==='easy'||
     (P.off||[]).some(x=>/No intervals/.test(x));
   if(noIntervals&&AERO_MODES[aeroMode].kind==='interval')aeroMode='stepup';
   if(feelHas('feet')&&['jog','jogwalk','rope'].indexOf(aeroMode)>=0)aeroMode='stepup';
@@ -2434,7 +2437,7 @@ function openSettings(){
       'Decisions run off your 7-day HRV trend, not a single morning \u2014 one reading is too noisy to act on. '+
       'Apple Watch reports SDNN and measures roughly 8 ms low against a chest strap, so your own trend is meaningful but the absolute number should not be compared with published norms.'+
     '</div></div>'+
-    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v10.0 \u00B7 single file \u00B7 data stored on this device</div>'+
+    '<div class="muted" style="text-align:center;padding:8px 0 20px">RECOVERY v10.1 \u00B7 single file \u00B7 data stored on this device</div>'+
   '</div>');
 }
 /* Everything I would ask about if something is not working. */
@@ -2498,7 +2501,7 @@ function openDiag(){
   openSheet('<div style="padding:0 16px">'+
     '<div class="sec" style="margin:8px 0 10px">Diagnostics</div>'+
     '<div class="card" style="margin:0 0 10px">'+
-      diagRow('App version','v10.0')+
+      diagRow('App version','v10.1')+
       diagRow('Installed as app',standalone?'yes':'no, running in browser',standalone)+
       diagRow('Service worker',sw?'active':'not controlling this page',!!sw)+
       diagRow('Today (app)',TODAY)+
@@ -2555,7 +2558,7 @@ function hardReload(){
 }
 function copyDiag(){
   const c=ctx;
-  const rep=['Recovery v10.0',
+  const rep=['Recovery v10.1',
     'today='+TODAY,'device='+new Date().toString().slice(0,24),
     'standalone='+(window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true),
     'sw='+!!(navigator.serviceWorker&&navigator.serviceWorker.controller),
